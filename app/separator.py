@@ -5,6 +5,7 @@ toplam sureyi kisaltmaz, sadece RAM'i sisirir - bu yuzden tek isci.
 """
 from __future__ import annotations
 
+import json
 import queue
 import threading
 import time
@@ -40,6 +41,7 @@ class Job:
     src: Path
     dest: Path
     mode: str = "hybrid"          # "fast" (tek model) | "hybrid" (iki model)
+    kind: str = "separate"         # "separate" | "analyze"
     state: str = "queued"          # queued | running | done | error
     progress: float = 0.0          # 0..1
     stage: str = ""
@@ -51,6 +53,7 @@ class Job:
     def as_dict(self) -> dict:
         d = {
             "song_id": self.song_id,
+            "kind": self.kind,
             "state": self.state,
             "progress": round(self.progress, 4),
             "stage": self.stage,
@@ -78,19 +81,24 @@ class SeparationQueue:
 
     # ---------------------------------------------------------------- public
 
-    def submit(self, song_id: str, src: Path, dest: Path, mode: str = "hybrid") -> Job:
+    def submit(self, song_id: str, src: Path, dest: Path, mode: str = "hybrid",
+               kind: str = "separate") -> Job:
+        # Isler tur+sarki ciftiyle anahtarlanir: ayirma isi calisirken
+        # gelen analiz isi onun kaydini ezmemeli, yoksa arayuz sarkiyi
+        # "ayriliyor" gostermeye devam eder
+        key = f"{kind}:{song_id}"
         with self._lock:
-            existing = self._jobs.get(song_id)
+            existing = self._jobs.get(key)
             if existing and existing.state in ("queued", "running"):
                 return existing
-            job = Job(song_id=song_id, src=src, dest=dest, mode=mode)
-            self._jobs[song_id] = job
+            job = Job(song_id=song_id, src=src, dest=dest, mode=mode, kind=kind)
+            self._jobs[key] = job
         self._q.put(job)
         return job
 
-    def get(self, song_id: str) -> Optional[Job]:
+    def get(self, song_id: str, kind: str = "separate") -> Optional[Job]:
         with self._lock:
-            return self._jobs.get(song_id)
+            return self._jobs.get(f"{kind}:{song_id}")
 
     def all(self) -> dict[str, dict]:
         with self._lock:
@@ -123,31 +131,58 @@ class SeparationQueue:
         job.started_at = time.time()
         job.dest.mkdir(parents=True, exist_ok=True)
 
+        if job.kind == "analyze":
+            self._analyze(job)
+        else:
+            self._separate(job)
+
+        job.progress = 1.0
+        job.state = "done"
+        job.stage = "hazır"
+        job.finished_at = time.time()
+
+    def _analyze(self, job: Job, base: float = 0.0, span: float = 1.0) -> None:
+        from .analysis import analyze, cache_path
+        job.stage = "ton ve akor analizi"
+        job.progress = base + span * 0.1
+        d = analyze(job.dest)
+        cache_path(job.dest).write_text(
+            json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+        job.progress = base + span
+
+    def _separate(self, job: Job) -> None:
         passes = ["htdemucs_6s"] + (["htdemucs"] if job.mode == "hybrid" else [])
         total_passes = len(passes)
         stems: dict[str, object] = {}
         samplerate = 44100
 
+        # Ilerleme butcesi: modeller %0-78, dosya yazma %78-85, analiz %85-100.
+        # Analiz ayirmanin yaninda ucuz (6:39'luk sarkida 44 sn) ama gorunur
+        # olmasi lazim, yoksa cubuk dolu kalirken uygulama takilmis gibi durur.
+        SEP, WRITE = 0.78, 0.85
+
         for idx, model_name in enumerate(passes):
             job.stage = f"{model_name} ({idx + 1}/{total_passes})"
-            base, span = idx / total_passes, 1 / total_passes
-            # Ayirma asamasi toplam surenin ~%90'i, yazma ~%10'u
             out_sr: dict = {}
-            self._apply(job, model_name, base, span * 0.9, stems, out_sr)
+            self._apply(job, model_name, SEP * idx / total_passes,
+                        SEP / total_passes, stems, out_sr)
             samplerate = out_sr.get("sr", samplerate)
 
-        job.stage = "dosyalar yaziliyor"
+        job.stage = "dosyalar yazılıyor"
         names = list(stems.keys())
         for i, name in enumerate(names):
             dest = job.dest / f"{TR.get(name, name)}.mp3"
             save_audio(stems[name], dest, samplerate=samplerate, bitrate=BITRATE)
-            job.progress = 0.9 + 0.1 * (i + 1) / len(names)
-
+            job.progress = SEP + (WRITE - SEP) * (i + 1) / len(names)
         stems.clear()
-        job.progress = 1.0
-        job.state = "done"
-        job.stage = "hazir"
-        job.finished_at = time.time()
+
+        # Ayirma bitince analizi de yap: kullanici tek dugmeye basip
+        # her seyi hazir bulsun
+        try:
+            self._analyze(job, base=WRITE, span=1.0 - WRITE)
+        except Exception:
+            # Analiz basarisiz olsa da kanallar hazir; isi batirmaya degmez
+            job.stage = "kanallar hazır (analiz başarısız)"
 
     def _apply(self, job: Job, model_name: str, base: float, span: float,
                stems: dict, out_sr: dict) -> None:

@@ -288,6 +288,7 @@ async function openPlayer(song) {
   });
 
   wireOutput(ch);
+  loadAnalysis(song);          // beklemeye gerek yok, geldiginde yerine oturur
   $('#t-dur').textContent = fmt(P.duration);
   computePeaks(envs);
   drawWave();
@@ -362,6 +363,96 @@ function buildMixer() {
       applyGains();
     };
     m.appendChild(el);
+  }
+}
+
+/* ====================================================================
+   ANALİZ ŞERİDİ  (ton / gam / pentatonik / tempo)
+   ==================================================================== */
+
+let analysisPoll = null;
+
+function chips(notes, root) {
+  return `<div class="chips">${notes.map((n) =>
+    `<span class="chip${n === root ? ' root' : ''}">${n}</span>`).join('')}</div>`;
+}
+
+/* Korelasyon katsayisini kullaniciya ham sayi olarak vermek anlamsiz;
+   ne kadar guvenilecegini kelimeyle soyluyoruz. */
+function confWord(c) {
+  if (c >= 0.75) return 'güçlü eşleşme';
+  if (c >= 0.60) return 'orta eşleşme';
+  return 'zayıf — kulağınla doğrula';
+}
+
+function renderAnalysis(d) {
+  const el = $('#analysis');
+  el.classList.remove('hidden');
+  const k = d.key, sc = d.scale;
+  const alt = d.alternatives && d.alternatives[0];
+  const weak = k.confidence < 0.60 && alt;
+
+  el.innerHTML = `
+    <div class="acard">
+      <div class="acap">Ton</div>
+      <div class="aval">${k.label}</div>
+      <div class="asub">${confWord(k.confidence)}${
+        weak ? ` · belki ${alt.label}` : ''}</div>
+    </div>
+    <div class="acard wide">
+      <div class="acap">Gam — ${sc.name}</div>
+      ${chips(sc.notes, k.root)}
+      <div class="asub">akrabası ${sc.relative}</div>
+    </div>
+    <div class="acard wide">
+      <div class="acap">Pentatonik</div>
+      ${chips(sc.pentatonic, k.root)}
+      <div class="asub">solo çalışırken bu beş nota güvenli</div>
+    </div>
+    <div class="acard">
+      <div class="acap">Tempo</div>
+      <div class="aval">${d.tempo}<span class="unit">BPM</span></div>
+      <div class="asub">${d.tempo_alt
+        ? `yarısı/katı olabilir: ${d.tempo_alt}`
+        : (d.common_chords || []).slice(0, 4).join(' · ')}</div>
+    </div>`;
+}
+
+function renderAnalysisPending(song, job) {
+  const el = $('#analysis');
+  el.classList.remove('hidden');
+  el.className = 'analysis-bar';
+  if (job && (job.state === 'running' || job.state === 'queued')) {
+    el.innerHTML = `<span>Ton ve gam analizi çalışıyor…</span>
+      <div class="prog"><i style="width:${Math.round((job.progress || 0) * 100)}%"></i></div>`;
+  } else {
+    el.innerHTML = `<span>Bu şarkının ton/gam analizi yok.</span>
+      <button class="btn sec" id="btn-analyze">Analiz et</button>`;
+    $('#btn-analyze').onclick = async (e) => {
+      e.target.disabled = true;
+      e.target.textContent = 'başlatılıyor…';
+      await fetch(`/api/songs/${song.id}/analyze`, { method: 'POST' });
+      loadAnalysis(song);
+    };
+  }
+}
+
+async function loadAnalysis(song) {
+  clearTimeout(analysisPoll);
+  const el = $('#analysis');
+  el.className = 'analysis hidden';
+  el.innerHTML = '';
+
+  const res = await fetch(`/api/songs/${song.id}/analysis`);
+  if (res.status === 200) {
+    el.className = 'analysis';
+    renderAnalysis(await res.json());
+    return;
+  }
+  const body = await res.json();
+  renderAnalysisPending(song, body.job);
+  if (body.job && (body.job.state === 'running' || body.job.state === 'queued')) {
+    analysisPoll = setTimeout(() => loadAnalysis(song), 2000);
   }
 }
 
@@ -519,6 +610,7 @@ function initControls() {
 
   $('#btn-library').onclick = () => {
     pause();
+    clearTimeout(analysisPoll);
     $('#player').classList.add('hidden');
     $('#library').classList.remove('hidden');
     loadLibrary();

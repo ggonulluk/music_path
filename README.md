@@ -95,7 +95,7 @@ stems\            Ayrılmış kanallar (şarkı başına bir klasör, 192 kbps m
 tools\
   separate_test.py   Komut satırından ayırma
   analyze_stems.py   Kanalların enerji analizi
-  analyze_music.py   Ton, gam, tempo, akor tespiti
+  analyze_music.py   Ton, gam, tempo, akor tespiti (miks/kanal karsilastirmali)
 ```
 
 ### Ses motoru
@@ -138,12 +138,10 @@ PyTorch'un işlemci sürümü gerekiyorsa:
 - **Tempo yavaşlatma, ses perdesi bozulmadan** (%25–%125)
 - **Perde kaydırma** (±6 yarım ton)
 - Klavye kısayolları
-- Ton / gam / tempo / akor analizi (`tools/analyze_music.py`)
+- **Ton / gam / pentatonik / tempo şeridi** — ayırmadan sonra otomatik
 
 **Sırada**
 
-- Analiz sonucunu arayüze taşımak: şarkı açılınca ton, gam ve pentatonik
-  bilgi şeridi. Ölçüldü ve güvenilir.
 - Nota transkripsiyonu (`basic-pitch`). Ayrı venv'de test edildi, izole
   gitar kanalında iyi sonuç veriyor (E minör gamına uyum %91). Kanal
   başına "notaları çıkar" düğmesi olarak eklenecek.

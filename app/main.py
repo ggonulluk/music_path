@@ -7,13 +7,13 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Optional
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from mutagen import File as MutagenFile
 
+from . import analysis
 from .separator import QUEUE, SONGS, STEMS, STEM_ORDER
 
 AUDIO_EXT = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus", ".aac", ".wma"}
@@ -54,7 +54,7 @@ def metadata(path: Path) -> dict:
 def describe(sid: str, path: Path) -> dict:
     out = STEMS / path.stem
     available = [s for s in STEM_ORDER if (out / f"{s}.mp3").exists()]
-    job = QUEUE.get(sid)
+    job = QUEUE.get(sid, "separate")
 
     if len(available) == len(STEM_ORDER):
         state = "ready"
@@ -70,10 +70,14 @@ def describe(sid: str, path: Path) -> dict:
         "file": path.name,
         "state": state,
         "stems": available,
+        "analysis": analysis.cache_path(out).exists(),
         **metadata(path),
     }
     if job:
         info["job"] = job.as_dict()
+    ajob = QUEUE.get(sid, "analyze")
+    if ajob:
+        info["analysis_job"] = ajob.as_dict()
     return info
 
 
@@ -102,6 +106,36 @@ def separate(sid: str, mode: str = "hybrid"):
     src = lib[sid]
     job = QUEUE.submit(sid, src, STEMS / src.stem, mode=mode)
     return job.as_dict()
+
+
+@app.get("/api/songs/{sid}/analysis")
+def get_analysis(sid: str):
+    """Onbellekteki analizi dondur.
+
+    202 = henuz yok ya da hesaplaniyor; istemci POST /analyze ile
+    tetikleyip bu ucu yoklamaya devam eder.
+    """
+    lib = scan()
+    if sid not in lib:
+        raise HTTPException(404, "sarki bulunamadi")
+    folder = STEMS / lib[sid].stem
+    cached = analysis.load_cached(folder)
+    if cached:
+        return cached
+    job = QUEUE.get(sid, "analyze")
+    return JSONResponse(
+        {"pending": True, "job": job.as_dict() if job else None}, status_code=202)
+
+
+@app.post("/api/songs/{sid}/analyze")
+def start_analysis(sid: str):
+    lib = scan()
+    if sid not in lib:
+        raise HTTPException(404, "sarki bulunamadi")
+    folder = STEMS / lib[sid].stem
+    if not (folder / "gitar.mp3").exists():
+        raise HTTPException(409, "once kanallara ayrilmali")
+    return QUEUE.submit(sid, lib[sid], folder, kind="analyze").as_dict()
 
 
 @app.get("/api/jobs")
