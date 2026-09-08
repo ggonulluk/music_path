@@ -153,6 +153,27 @@ h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.3px;display:flex;alig
   position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   gap:12px;color:var(--dim);font-size:13px;text-align:center;padding:0 20px;
 }
+/* Akor rozeti: ayni anda duyulan notalardan cikarilan akor adi */
+.chord{
+  display:flex;align-items:baseline;gap:10px;padding:8px 13px;
+  background:var(--panel-2);border:1px solid var(--line);
+  border-left:3px solid var(--accent);border-radius:9px;min-height:44px;
+}
+.chord .cname{
+  font-size:22px;font-weight:700;letter-spacing:-.5px;color:var(--accent);
+  line-height:1.1;
+}
+.chord .csub{font-size:11px;color:var(--dimmer);letter-spacing:.2px}
+/* Sablona tam oturmayan eslesme - iddiayi yumusatiyoruz */
+.chord.approx{border-left-color:var(--dimmer)}
+.chord.approx .cname{color:var(--dim)}
+/* Iki bagimsiz yontem ayni akoru soyluyor */
+.chord.agree{border-left-color:#4ade80}
+.chord.agree .cname{color:#4ade80}
+/* Nota bulunamadi, sadece librosa analizinden geliyor */
+.chord.only-analysis{border-left-color:var(--line)}
+.chord.only-analysis .cname{color:var(--dim);font-size:18px}
+
 .note-now{
   display:flex;align-items:center;gap:6px;min-height:26px;
   font-size:12px;color:var(--dim);flex-wrap:wrap;

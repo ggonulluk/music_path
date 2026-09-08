@@ -29,6 +29,63 @@ const TRANSCRIBABLE = ['gitar', 'bas', 'vokal', 'piyano', 'diger'];
 // Standart akort acik teller - piano roll'da yatay kilavuz cizgisi olarak
 const OPEN_STRINGS = [['E', 40], ['A', 45], ['D', 50], ['G', 55], ['B', 59], ['e', 64]];
 
+const PC = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+/* Akor sozlugu. Gitarda gercekten karsilasilan tipler; nadir renkli
+   akorlari koymuyoruz cunku her ek sablon yanlis eslesme riski demek. */
+const CHORD_TYPES = [
+  { suf: '',     pcs: [0, 4, 7] },
+  { suf: 'm',    pcs: [0, 3, 7] },
+  { suf: '5',    pcs: [0, 7] },            // power chord
+  { suf: '7',    pcs: [0, 4, 7, 10] },
+  { suf: 'm7',   pcs: [0, 3, 7, 10] },
+  { suf: 'maj7', pcs: [0, 4, 7, 11] },
+  { suf: 'sus2', pcs: [0, 2, 7] },
+  { suf: 'sus4', pcs: [0, 5, 7] },
+  { suf: 'dim',  pcs: [0, 3, 6] },
+  { suf: 'aug',  pcs: [0, 4, 8] },
+  { suf: '6',    pcs: [0, 4, 7, 9] },
+  { suf: 'm6',   pcs: [0, 3, 7, 9] },
+  { suf: 'add9', pcs: [0, 2, 4, 7] },
+];
+
+/* Ayni anda duyulan perdelerden akor adi cikar.
+
+   Puanlama: eksik nota, fazla notadan daha agir cezalandiriliyor.
+   Duyulmayan bir akor sesini varsaymak ("D var ama duymadim, yine de
+   E7 diyeyim"), duyulan fazladan bir sesi gormezden gelmekten daha
+   buyuk bir iddia. */
+function nameChord(pitches) {
+  const pcs = [...new Set(pitches.map((p) => ((p % 12) + 12) % 12))];
+  if (pcs.length < 2) return null;
+  const bass = ((Math.min(...pitches) % 12) + 12) % 12;
+
+  let best = null;
+  for (let root = 0; root < 12; root++) {
+    for (const t of CHORD_TYPES) {
+      const tpl = t.pcs.map((i) => (root + i) % 12);
+      const matched = tpl.filter((p) => pcs.includes(p)).length;
+      const missing = tpl.length - matched;
+      const extra = pcs.filter((p) => !tpl.includes(p)).length;
+      let score = matched * 2 - missing * 2.5 - extra * 1.2;
+      if (root === bass) score += 0.6;      // kok bastaysa daha olasi
+      score -= t.pcs.length * 0.05;          // esitlikte sade akoru sec
+      if (!best || score > best.score) best = { score, root, t, matched, missing, extra };
+    }
+  }
+  if (!best || best.matched < 2 || best.score < 2.5) return null;
+
+  // Ters cevrilmis akor gosterimi (E/G#) BILEREK yok: transkripsiyon
+  // cogu zaman en kalin teli kaciriyor, o zaman en pes duyulan nota
+  // gercek bas sanilip yanlis etiket cikiyor. Notalarin tamami zaten
+  // asagidaki ciplerde gorunuyor.
+  return {
+    label: PC[best.root] + best.t.suf,
+    exact: best.missing === 0 && best.extra === 0,
+    notes: best.t.pcs.map((i) => PC[(best.root + i) % 12]),
+  };
+}
+
 const $ = (s) => document.querySelector(s);
 const fmt = (t) => {
   if (!isFinite(t) || t < 0) t = 0;
@@ -379,6 +436,16 @@ function buildMixer() {
    ==================================================================== */
 
 let analysisPoll = null;
+const A = { data: null };
+
+/* Librosa analizinin o ana denk gelen akoru. Transkripsiyondan cikardigimiz
+   akorla karsilastirmak icin: iki bagimsiz yontem ayni seyi diyorsa guven
+   yuksek demektir. */
+function analysisChordAt(t) {
+  if (!A.data || !A.data.chords) return null;
+  for (const [a, b, c] of A.data.chords) if (t >= a && t < b) return c;
+  return null;
+}
 
 function chips(notes, root) {
   return `<div class="chips">${notes.map((n) =>
@@ -451,10 +518,12 @@ async function loadAnalysis(song) {
   el.className = 'analysis hidden';
   el.innerHTML = '';
 
+  A.data = null;
   const res = await fetch(`/api/songs/${song.id}/analysis`);
   if (res.status === 200) {
     el.className = 'analysis';
-    renderAnalysis(await res.json());
+    A.data = await res.json();
+    renderAnalysis(A.data);
     return;
   }
   const body = await res.json();
@@ -613,13 +682,43 @@ function drawRoll() {
     ? `döngüye yakınlaşıldı · ${vis.length} nota` : '';
 }
 
-/* Oynatma kafasindaki notalari isimleri ve tel/perde tahminiyle goster. */
+/* Oynatma kafasindaki notalar + bunlardan cikan akor adi. */
 function renderNoteNow(pos) {
   const box = $('#note-now');
-  if (!N.data) { box.innerHTML = ''; return; }
-  const live = N.data.notes.filter(([s, e]) => s <= pos && pos < e).slice(0, 6);
-  if (!live.length) { box.innerHTML = ''; return; }
-  box.innerHTML = live.map(([, , p]) => {
+  const badge = $('#chord-badge');
+  if (!N.data) { box.innerHTML = ''; badge.className = 'chord hidden'; return; }
+
+  const live = N.data.notes.filter(([s, e]) => s <= pos && pos < e);
+  const anChord = analysisChordAt(pos);
+
+  if (!live.length) {
+    box.innerHTML = '';
+    // Nota yoksa bile analiz akorunu gosterelim - sustaki bir anda ya da
+    // transkripsiyonun kacirdigi yerde tamamen bos kalmasin
+    if (anChord) {
+      badge.className = 'chord only-analysis';
+      badge.innerHTML = `<span class="cname">${anChord}</span>
+        <span class="csub">analiz</span>`;
+    } else badge.className = 'chord hidden';
+    return;
+  }
+
+  const ch = nameChord(live.map((n) => n[2]));
+  if (ch) {
+    // Kok notalari karsilastiriyoruz. Analiz sadece maj/min/5 uretebiliyor,
+    // transkripsiyon 7'li ve sus'lu da bulabiliyor; tipleri kiyaslamak
+    // "E7 vs E5" gibi aslinda uyusan durumlari uyusmaz gosterirdi.
+    const root = (s) => (s.match(/^[A-G]#?/) || [''])[0];
+    const agree = anChord && root(anChord) === root(ch.label);
+    badge.className = 'chord' + (ch.exact ? '' : ' approx') + (agree ? ' agree' : '');
+    badge.innerHTML = `<span class="cname">${ch.label}</span>
+      <span class="csub">${ch.notes.join(' ')}${ch.exact ? '' : ' · yaklaşık'}${
+        anChord ? (agree ? ' · analiz ✓' : ` · analiz: ${anChord}`) : ''}</span>`;
+  } else {
+    badge.className = 'chord hidden';
+  }
+
+  box.innerHTML = live.slice(0, 6).map(([, , p]) => {
     const f = N.data.frets[String(p)];
     const pos2 = f ? `<small>${f.string}/${f.fret}</small>` : '';
     return `<span class="nn">${N.data.names[String(p)]}${pos2}</span>`;

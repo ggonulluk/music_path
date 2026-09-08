@@ -70,6 +70,24 @@ Sağdaki panel, seçtiğin kanaldan çıkarılan notaları piano roll olarak gö
   **tel/perde tahmini** yazar (`C3 A/3` = A teli 3. perde).
 - **MIDI indir** ile notaları MuseScore, Guitar Pro ya da bir DAW'da açabilirsin.
 
+### Akor rozeti
+
+Aynı anda duyulan notalardan akorun adı çıkarılır ve büyük puntoyla yazılır
+(`E`, `Am7`, `E5`, `Gsus4`…). Altındaki küçük yazı akoru oluşturan notaları
+gösterir.
+
+Rozetin rengi ne kadar güveneceğini söyler:
+
+| Renk | Anlamı |
+|---|---|
+| **Yeşil** | Transkripsiyon ve librosa akor analizi **aynı kökü** buldu |
+| **Turuncu** | Notalar bir akor şablonuna tam oturdu |
+| **Gri** (`yaklaşık`) | Kısmi eşleşme — eksik ya da fazla nota var |
+
+Ters çevrilmiş akor gösterimi (`E/G#`) bilerek yok: transkripsiyon çoğu zaman
+en kalın teli kaçırıyor, o zaman en pes duyulan nota gerçek bas sanılıp yanlış
+etiket çıkıyor. Notaların tamamı zaten altındaki çiplerde görünüyor.
+
 Tel/perde tahmini kabadır — en düşük perdeyi seçer, gerçek parmak pozisyonu
 çevredeki notalara göre değişir. Başlangıç noktası olarak düşün.
 
@@ -177,10 +195,11 @@ PyTorch'un işlemci sürümü gerekiyorsa:
 - Klavye kısayolları
 - **Ton / gam / pentatonik / tempo şeridi** — ayırmadan sonra otomatik
 - **Nota transkripsiyonu** — piano roll, tel/perde tahmini, MIDI indirme
+- **Akor rozeti** — duyulan notalardan akor adı, analizle çapraz kontrollü
 
 **Sırada**
 
-- Akor şeridi — dalga formunun üstünde, "tahmin" olduğu belirtilerek
+- Akor şeridi — dalga formu boyunca akor dizisi, "tahmin" olduğu belirtilerek
 - Bölüm işaretleri (intro / verse / solo) ve döngüleri kaydetme
 - Sayım metronomu
 
