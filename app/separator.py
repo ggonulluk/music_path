@@ -41,7 +41,8 @@ class Job:
     src: Path
     dest: Path
     mode: str = "hybrid"          # "fast" (tek model) | "hybrid" (iki model)
-    kind: str = "separate"         # "separate" | "analyze"
+    kind: str = "separate"         # "separate" | "analyze" | "transcribe"
+    stem: str = ""                 # sadece "transcribe" icin
     state: str = "queued"          # queued | running | done | error
     progress: float = 0.0          # 0..1
     stage: str = ""
@@ -54,6 +55,7 @@ class Job:
         d = {
             "song_id": self.song_id,
             "kind": self.kind,
+            "stem": self.stem,
             "state": self.state,
             "progress": round(self.progress, 4),
             "stage": self.stage,
@@ -82,23 +84,25 @@ class SeparationQueue:
     # ---------------------------------------------------------------- public
 
     def submit(self, song_id: str, src: Path, dest: Path, mode: str = "hybrid",
-               kind: str = "separate") -> Job:
-        # Isler tur+sarki ciftiyle anahtarlanir: ayirma isi calisirken
-        # gelen analiz isi onun kaydini ezmemeli, yoksa arayuz sarkiyi
-        # "ayriliyor" gostermeye devam eder
-        key = f"{kind}:{song_id}"
+               kind: str = "separate", stem: str = "") -> Job:
+        # Isler tur+kanal+sarki ucluyle anahtarlanir: ayirma isi calisirken
+        # gelen analiz isi onun kaydini ezmemeli (yoksa arayuz sarkiyi
+        # "ayriliyor" gostermeye devam eder), gitar transkripsiyonu da bas
+        # transkripsiyonunu ezmemeli
+        key = f"{kind}:{stem}:{song_id}"
         with self._lock:
             existing = self._jobs.get(key)
             if existing and existing.state in ("queued", "running"):
                 return existing
-            job = Job(song_id=song_id, src=src, dest=dest, mode=mode, kind=kind)
+            job = Job(song_id=song_id, src=src, dest=dest, mode=mode,
+                      kind=kind, stem=stem)
             self._jobs[key] = job
         self._q.put(job)
         return job
 
-    def get(self, song_id: str, kind: str = "separate") -> Optional[Job]:
+    def get(self, song_id: str, kind: str = "separate", stem: str = "") -> Optional[Job]:
         with self._lock:
-            return self._jobs.get(f"{kind}:{song_id}")
+            return self._jobs.get(f"{kind}:{stem}:{song_id}")
 
     def all(self) -> dict[str, dict]:
         with self._lock:
@@ -133,6 +137,8 @@ class SeparationQueue:
 
         if job.kind == "analyze":
             self._analyze(job)
+        elif job.kind == "transcribe":
+            self._transcribe(job)
         else:
             self._separate(job)
 
@@ -149,6 +155,15 @@ class SeparationQueue:
         cache_path(job.dest).write_text(
             json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
         job.progress = base + span
+
+    def _transcribe(self, job: Job) -> None:
+        from . import transcribe as tr
+        # basic-pitch alt surecte kendi ilerlemesini bildirmiyor; asamayi
+        # yaziyoruz ki kullanici neyin surdugunu bilsin
+        job.stage = f"{job.stem} kanalından notalar çıkarılıyor"
+        job.progress = 0.15
+        tr.transcribe(job.dest, job.stem)
+        job.progress = 1.0
 
     def _separate(self, job: Job) -> None:
         passes = ["htdemucs_6s"] + (["htdemucs"] if job.mode == "hybrid" else [])

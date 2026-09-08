@@ -116,6 +116,43 @@ h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.3px;display:flex;alig
   border-left:2px solid var(--accent);border-right:2px solid var(--accent);
   box-shadow:0 0 14px rgba(255,179,71,.35);
 }
+/* ---------------------------------------------------------- nota paneli */
+.notes-wrap{margin-top:8px}
+.notes-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.nlabel{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--dimmer)}
+.nstems{display:flex;gap:4px}
+.nstem{
+  background:var(--panel-2);border:1px solid var(--line);color:var(--dim);
+  border-radius:6px;padding:3px 10px;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit;transition:.12s;
+}
+.nstem:hover{border-color:#454d5e;color:var(--fg)}
+.nstem.on{background:var(--panel);border-color:var(--nc);color:var(--nc)}
+.nstem.has::after{content:" ●";font-size:8px;vertical-align:middle;opacity:.7}
+.ninfo{font-size:11.5px;color:var(--dimmer);font-variant-numeric:tabular-nums}
+.nzoom{font-size:11.5px;color:var(--accent);font-weight:600}
+.ghost.mini{padding:3px 10px;font-size:11.5px;text-decoration:none}
+
+.notes-body{
+  position:relative;height:132px;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+  cursor:pointer;
+}
+#roll{width:100%;height:100%;display:block}
+.nempty{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  gap:12px;color:var(--dim);font-size:13px;text-align:center;padding:0 20px;
+}
+.note-now{
+  display:flex;align-items:center;gap:6px;margin-top:7px;min-height:24px;
+  font-size:12px;color:var(--dim);flex-wrap:wrap;
+}
+.note-now .nn{
+  background:var(--panel-2);border:1px solid var(--line);border-radius:6px;
+  padding:3px 9px;font-weight:650;color:var(--fg);font-variant-numeric:tabular-nums;
+}
+.note-now .nn small{color:var(--dimmer);font-weight:400;margin-left:5px;font-size:10.5px}
+
 .timerow{display:flex;gap:12px;margin-top:8px;font-size:12.5px;color:var(--dim);font-variant-numeric:tabular-nums}
 .t-loop{color:var(--accent);font-weight:600}
 .spacer{flex:1}

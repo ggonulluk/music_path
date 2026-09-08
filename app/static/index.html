@@ -46,6 +46,25 @@
     <div id="playhead" class="playhead"></div>
   </div>
 
+  <!-- Nota paneli. Dalga formuyla ayni zaman ekseninde duruyor ki
+       hangi notanin sarkinin neresinde oldugu gozle eslesin. -->
+  <div class="notes-wrap">
+    <div class="notes-head">
+      <span class="nlabel">Notalar</span>
+      <div id="note-stems" class="nstems"></div>
+      <span id="roll-zoom" class="nzoom"></span>
+      <div class="spacer"></div>
+      <span id="note-info" class="ninfo"></span>
+      <a id="note-midi" class="ghost mini hidden" download>MIDI indir</a>
+    </div>
+    <div id="note-body" class="notes-body">
+      <canvas id="roll"></canvas>
+      <div id="roll-head" class="playhead"></div>
+      <div id="note-empty" class="nempty"></div>
+    </div>
+    <div id="note-now" class="note-now"></div>
+  </div>
+
   <div class="timerow">
     <span id="t-cur">0:00</span>
     <span id="t-loop" class="t-loop"></span>

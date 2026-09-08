@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from mutagen import File as MutagenFile
 
-from . import analysis
+from . import analysis, transcribe
 from .separator import QUEUE, SONGS, STEMS, STEM_ORDER
 
 AUDIO_EXT = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus", ".aac", ".wma"}
@@ -71,6 +71,9 @@ def describe(sid: str, path: Path) -> dict:
         "state": state,
         "stems": available,
         "analysis": analysis.cache_path(out).exists(),
+        "notes": [s for s in transcribe.TRANSCRIBABLE
+                  if transcribe.json_path(out, s).exists()],
+        "can_transcribe": transcribe.available(),
         **metadata(path),
     }
     if job:
@@ -136,6 +139,51 @@ def start_analysis(sid: str):
     if not (folder / "gitar.mp3").exists():
         raise HTTPException(409, "once kanallara ayrilmali")
     return QUEUE.submit(sid, lib[sid], folder, kind="analyze").as_dict()
+
+
+@app.get("/api/songs/{sid}/notes/{stem}")
+def get_notes(sid: str, stem: str):
+    """Onbellekteki nota dizisi. 202 = yok ya da hesaplaniyor."""
+    lib = scan()
+    if sid not in lib:
+        raise HTTPException(404, "sarki bulunamadi")
+    if stem not in transcribe.TRANSCRIBABLE:
+        raise HTTPException(400, f"bu kanal icin nota cikarilmaz: {stem}")
+    folder = STEMS / lib[sid].stem
+    cached = transcribe.load_cached(folder, stem)
+    if cached:
+        return transcribe.enrich(cached)
+    job = QUEUE.get(sid, "transcribe", stem)
+    return JSONResponse(
+        {"pending": True, "available": transcribe.available(),
+         "job": job.as_dict() if job else None}, status_code=202)
+
+
+@app.post("/api/songs/{sid}/transcribe")
+def start_transcribe(sid: str, stem: str = "gitar"):
+    lib = scan()
+    if sid not in lib:
+        raise HTTPException(404, "sarki bulunamadi")
+    if stem not in transcribe.TRANSCRIBABLE:
+        raise HTTPException(400, f"bu kanal icin nota cikarilmaz: {stem}")
+    if not transcribe.available():
+        raise HTTPException(503, ".venv-transcribe kurulu degil")
+    folder = STEMS / lib[sid].stem
+    if not (folder / f"{stem}.mp3").exists():
+        raise HTTPException(409, "once kanallara ayrilmali")
+    return QUEUE.submit(sid, lib[sid], folder, kind="transcribe", stem=stem).as_dict()
+
+
+@app.get("/api/songs/{sid}/midi/{stem}")
+def get_midi(sid: str, stem: str):
+    lib = scan()
+    if sid not in lib:
+        raise HTTPException(404, "sarki bulunamadi")
+    path = transcribe.midi_path(STEMS / lib[sid].stem, stem)
+    if not path.exists():
+        raise HTTPException(404, "MIDI henuz uretilmedi")
+    return FileResponse(path, media_type="audio/midi",
+                        filename=f"{lib[sid].stem} - {stem}.mid")
 
 
 @app.get("/api/jobs")

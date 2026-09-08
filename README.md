@@ -56,6 +56,23 @@ Döngü (A/B) yavaşlatmayla birlikte çalışır — asıl kullanım şekli de 
 Dalga formunda **turuncu olan gitar kanalının seviyesi** — solonun ya da riff'in
 nerede olduğunu gözle bulmak için.
 
+### Nota paneli
+
+Dalga formunun altındaki panel, seçtiğin kanaldan çıkarılan notaları piano roll
+olarak gösterir. İlk kez kullanırken **Notaları çıkar**'a basman gerekir
+(6 dakikalık bir kanal ~20 saniye).
+
+- **Döngü açıkken panel o aralığa yakınlaşır.** Tüm şarkıyı göstermek 1700 notayı
+  900 piksele sıkıştırıyor ve okunmuyor; asıl çalışma da döngü içinde olduğu için
+  yakınlaşmak doğru olan.
+- Sol kenardaki `e B G D A E` çizgileri açık tel perdeleri.
+- Panelin altında, oynatma kafasının o anda üzerinde olduğu notalar ve
+  **tel/perde tahmini** yazar (`C3 A/3` = A teli 3. perde).
+- **MIDI indir** ile notaları MuseScore, Guitar Pro ya da bir DAW'da açabilirsin.
+
+Tel/perde tahmini kabadır — en düşük perdeyi seçer, gerçek parmak pozisyonu
+çevredeki notalara göre değişir. Başlangıç noktası olarak düşün.
+
 ---
 
 ## Kanal kalitesi hakkında
@@ -88,14 +105,34 @@ Modu değiştirmek için: `POST /api/songs/{id}/separate?mode=fast`
 app\
   main.py         FastAPI: kitaplık, iş kuyruğu API'si, ses servisi
   separator.py    Demucs motoru — tek işçi thread'li kuyruk, ilerleme takibi
+  analysis.py     Ton / gam / tempo / akor analizi (librosa)
+  transcribe.py   Nota çıkarma — ayrı venv'de alt süreç olarak çalışır
   static\         Arayüz (saf JS + Web Audio API)
     vendor\       signalsmith-stretch (MIT) — bkz. vendor\NOTICE.md
 songs\            Kaynak müzik dosyaların
-stems\            Ayrılmış kanallar (şarkı başına bir klasör, 192 kbps mp3)
+stems\            Ayrılmış kanallar + analysis.json + notes_<kanal>.json/.mid
 tools\
   separate_test.py   Komut satırından ayırma
   analyze_stems.py   Kanalların enerji analizi
-  analyze_music.py   Ton, gam, tempo, akor tespiti (miks/kanal karsilastirmali)
+  analyze_music.py   Ton, gam, tempo, akor tespiti (miks/kanal karşılaştırmalı)
+  bp_worker.py       basic-pitch işçisi (.venv-transcribe içinde koşar)
+```
+
+### İki ayrı Python ortamı
+
+`basic-pitch` TensorFlow çekiyor ve numpy'yi 1.26'ya düşürüyor — bu da ana
+ortamdaki torch/demucs kurulumunu bozar. Bu yüzden ayrı tutuluyor:
+
+| Ortam | İçerik | Kullanım |
+|---|---|---|
+| `.venv` | torch, demucs, librosa, fastapi | Uygulama ve ayırma |
+| `.venv-transcribe` | tensorflow, basic-pitch | Sadece nota çıkarma, alt süreç |
+
+Nota çıkarma ortamını kurmak (isteğe bağlı — yoksa panel bunu söyler):
+
+```
+python -m venv .venv-transcribe
+.venv-transcribe\Scripts\python.exe -m pip install basic-pitch
 ```
 
 ### Ses motoru
@@ -139,12 +176,10 @@ PyTorch'un işlemci sürümü gerekiyorsa:
 - **Perde kaydırma** (±6 yarım ton)
 - Klavye kısayolları
 - **Ton / gam / pentatonik / tempo şeridi** — ayırmadan sonra otomatik
+- **Nota transkripsiyonu** — piano roll, tel/perde tahmini, MIDI indirme
 
 **Sırada**
 
-- Nota transkripsiyonu (`basic-pitch`). Ayrı venv'de test edildi, izole
-  gitar kanalında iyi sonuç veriyor (E minör gamına uyum %91). Kanal
-  başına "notaları çıkar" düğmesi olarak eklenecek.
 - Akor şeridi — dalga formunun üstünde, "tahmin" olduğu belirtilerek
 - Bölüm işaretleri (intro / verse / solo) ve döngüleri kaydetme
 - Sayım metronomu

@@ -15,13 +15,19 @@
    Fader'lar gerdirmeden SONRA uygulaniyor, olcerler fader'dan once. */
 
 const STEMS = [
-  { id: 'gitar',  label: 'Gitar'  },
-  { id: 'vokal',  label: 'Vokal'  },
-  { id: 'davul',  label: 'Davul'  },
-  { id: 'bas',    label: 'Bas'    },
-  { id: 'piyano', label: 'Piyano' },
-  { id: 'diger',  label: 'Diğer'  },
+  { id: 'gitar',  label: 'Gitar',  color: '#ffb347' },
+  { id: 'vokal',  label: 'Vokal',  color: '#ff6b8b' },
+  { id: 'davul',  label: 'Davul',  color: '#a78bfa' },
+  { id: 'bas',    label: 'Bas',    color: '#4da3ff' },
+  { id: 'piyano', label: 'Piyano', color: '#3ecfb2' },
+  { id: 'diger',  label: 'Diğer',  color: '#78808f' },
 ];
+
+// Davul perdesiz; nota cikarmak anlamsiz olurdu
+const TRANSCRIBABLE = ['gitar', 'bas', 'vokal', 'piyano', 'diger'];
+
+// Standart akort acik teller - piano roll'da yatay kilavuz cizgisi olarak
+const OPEN_STRINGS = [['E', 40], ['A', 45], ['D', 50], ['G', 55], ['B', 59], ['e', 64]];
 
 const $ = (s) => document.querySelector(s);
 const fmt = (t) => {
@@ -289,6 +295,8 @@ async function openPlayer(song) {
 
   wireOutput(ch);
   loadAnalysis(song);          // beklemeye gerek yok, geldiginde yerine oturur
+  buildNoteStems(song);
+  loadNotes(song, N.stem);
   $('#t-dur').textContent = fmt(P.duration);
   computePeaks(envs);
   drawWave();
@@ -457,6 +465,168 @@ async function loadAnalysis(song) {
 }
 
 /* ====================================================================
+   NOTA PANELİ  (piano roll)
+
+   Basic-pitch izole kanaldan MIDI nota dizisi cikariyor. Cikarim ayri bir
+   venv'de alt surec olarak kosuyor (TensorFlow ana ortami bozardi).
+   ==================================================================== */
+
+const N = { stem: 'gitar', data: null, poll: null, song: null };
+
+function buildNoteStems(song) {
+  const box = $('#note-stems');
+  box.innerHTML = '';
+  for (const s of STEMS) {
+    if (!TRANSCRIBABLE.includes(s.id)) continue;
+    const b = document.createElement('button');
+    b.className = 'nstem' + (s.id === N.stem ? ' on' : '') +
+                  ((song.notes || []).includes(s.id) ? ' has' : '');
+    b.style.setProperty('--nc', s.color);
+    b.textContent = s.label;
+    b.onclick = () => { N.stem = s.id; buildNoteStems(song); loadNotes(song, s.id); };
+    box.appendChild(b);
+  }
+}
+
+async function loadNotes(song, stem) {
+  clearTimeout(N.poll);
+  N.song = song;
+  N.stem = stem;
+  N.data = null;
+  $('#note-midi').classList.add('hidden');
+  $('#note-info').textContent = '';
+  drawRoll();
+
+  const res = await fetch(`/api/songs/${song.id}/notes/${stem}`);
+  if (res.status === 200) {
+    N.data = await res.json();
+    $('#note-empty').classList.add('hidden');
+    $('#note-info').textContent =
+      `${N.data.count} nota · ${N.data.low}–${N.data.high}`;
+    const a = $('#note-midi');
+    a.href = `/api/songs/${song.id}/midi/${stem}`;
+    a.classList.remove('hidden');
+    drawRoll();
+    return;
+  }
+
+  const body = await res.json();
+  const job = body.job;
+  const el = $('#note-empty');
+  el.classList.remove('hidden');
+
+  if (job && (job.state === 'running' || job.state === 'queued')) {
+    el.innerHTML = `<span>${job.stage || 'sırada'}…</span>`;
+    N.poll = setTimeout(() => loadNotes(song, stem), 2500);
+  } else if (job && job.state === 'error') {
+    el.innerHTML = '<span>Nota çıkarma başarısız oldu.</span>';
+  } else if (body.available === false) {
+    el.innerHTML = '<span>Nota çıkarma ortamı kurulu değil ' +
+                   '(<code>.venv-transcribe</code>).</span>';
+  } else {
+    el.innerHTML = `<span>Bu kanalın notaları henüz çıkarılmadı.</span>
+      <button class="btn sec" id="btn-transcribe">Notaları çıkar</button>`;
+    $('#btn-transcribe').onclick = async (e) => {
+      e.target.disabled = true;
+      e.target.textContent = 'başlatılıyor…';
+      await fetch(`/api/songs/${song.id}/transcribe?stem=${stem}`, { method: 'POST' });
+      loadNotes(song, stem);
+    };
+  }
+}
+
+/* Roll'un gosterdigi zaman araligi.
+
+   Dongu aciksa oraya yakinlasiyoruz. Tum sarkiyi gostermek 1713 notayi
+   900 piksele sikistiriyor ve nota degil doku gibi gorunuyor; asil
+   calisma da zaten dongu icinde oldugu icin yakinlasmak dogru olan. */
+function rollRange() {
+  if (loopActive()) {
+    const pad = (P.loopB - P.loopA) * 0.06;
+    return [Math.max(0, P.loopA - pad), Math.min(P.duration, P.loopB + pad)];
+  }
+  return [0, P.duration];
+}
+
+/* Piano roll: x ekseni zaman, y ekseni perde. */
+function drawRoll() {
+  const cv = $('#roll');
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const c = cv.getContext('2d');
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, w, h);
+  if (!N.data || !N.data.notes.length || !P.duration) return;
+
+  const [t0, t1] = rollRange();
+  const tspan = Math.max(t1 - t0, 0.1);
+  const vis = N.data.notes.filter(([s, e]) => e >= t0 && s <= t1);
+
+  // Perde eksenini GORUNEN notalara gore olcekle. Tum sarkinin araligini
+  // kullanmak, dongude birkac yarim tonluk bir pasaj varken cubuklari
+  // 3 piksele sikistiriyordu.
+  const src = vis.length ? vis.map((n) => n[2]) : [N.data.low_midi, N.data.high_midi];
+  const lo = Math.min(...src) - 1, hi = Math.max(...src) + 1;
+  const span = Math.max(hi - lo, 6);
+  const y = (p) => h - ((p - lo + 0.5) / span) * h;
+  const rowH = Math.max(2, h / span);
+
+  // Acik tel kilavuzlari - gitar/bas icin parmak yerini kestirmeye yarar
+  if (N.stem === 'gitar' || N.stem === 'bas') {
+    c.font = '9px "Segoe UI",sans-serif';
+    for (const [name, p] of OPEN_STRINGS) {
+      if (p < lo || p > hi) continue;
+      const yy = y(p);
+      c.strokeStyle = 'rgba(255,255,255,.07)';
+      c.beginPath(); c.moveTo(0, yy); c.lineTo(w, yy); c.stroke();
+      c.fillStyle = 'rgba(255,255,255,.22)';
+      c.fillText(name, 3, yy - 2);
+    }
+  }
+
+  const color = (STEMS.find((s) => s.id === N.stem) || {}).color || '#ffb347';
+  const zoomed = t1 - t0 < P.duration - 0.01;
+  const barH = Math.max(rowH - 1, 2);
+
+  for (const [st, en, p, amp] of vis) {
+    const x0 = ((st - t0) / tspan) * w;
+    const x1 = ((en - t0) / tspan) * w;
+    c.globalAlpha = 0.35 + Math.min(0.65, amp);
+    c.fillStyle = color;
+    c.fillRect(x0, y(p) - barH / 2, Math.max(x1 - x0, 1.2), barH);
+  }
+
+  // Cubuk yeterince genis ve yuksekse nota adini uzerine yaz
+  c.globalAlpha = 1;
+  if (barH >= 7.5) {
+    c.font = `700 ${Math.min(11, Math.round(barH + 1))}px "Segoe UI",sans-serif`;
+    c.fillStyle = 'rgba(13,14,18,.9)';
+    c.textBaseline = 'middle';
+    for (const [st, en, p] of vis) {
+      if ((en - st) / tspan * w < 20) continue;
+      c.fillText(N.data.names[String(p)], ((st - t0) / tspan) * w + 4, y(p));
+    }
+  }
+  $('#roll-zoom').textContent = zoomed
+    ? `döngüye yakınlaşıldı · ${vis.length} nota` : '';
+}
+
+/* Oynatma kafasindaki notalari isimleri ve tel/perde tahminiyle goster. */
+function renderNoteNow(pos) {
+  const box = $('#note-now');
+  if (!N.data) { box.innerHTML = ''; return; }
+  const live = N.data.notes.filter(([s, e]) => s <= pos && pos < e).slice(0, 6);
+  if (!live.length) { box.innerHTML = ''; return; }
+  box.innerHTML = live.map(([, , p]) => {
+    const f = N.data.frets[String(p)];
+    const pos2 = f ? `<small>${f.string}/${f.fret}</small>` : '';
+    return `<span class="nn">${N.data.names[String(p)]}${pos2}</span>`;
+  }).join('');
+}
+
+/* ====================================================================
    DALGA FORMU
    Toplam miksin zarfi + uzerine gitar kanalinin zarfi. Gitarin nerede
    calindigini gozle gormek, calisirken bolum bulmayi kolaylastiriyor.
@@ -532,7 +702,14 @@ function render() {
   const pos = position();
   $('#t-cur').textContent = fmt(pos);
   const w = $('.wave-wrap').clientWidth;
-  $('#playhead').style.left = (P.duration ? (pos / P.duration) * w : 0) + 'px';
+  const frac = P.duration ? pos / P.duration : 0;
+  $('#playhead').style.left = (frac * w) + 'px';
+
+  // Roll kendi araligini gosteriyor (dongu aciksa yakinlasmis)
+  const [rt0, rt1] = rollRange();
+  const rf = Math.max(0, Math.min(1, (pos - rt0) / Math.max(rt1 - rt0, 0.1)));
+  $('#roll-head').style.left = (rf * $('.notes-body').clientWidth) + 'px';
+  renderNoteNow(pos);
 
   const band = $('#loop-band');
   if (loopActive()) {
@@ -581,6 +758,7 @@ function markLoop() {
   P.lastInput = position();
   P.lastInputAt = P.ctx.currentTime;
   push({});
+  drawRoll();      // dongu degisti -> roll'un yakinlasma araligi da degisti
   render();
 }
 
@@ -603,14 +781,23 @@ function initControls() {
   $('#btn-b').onclick = () => { P.loopB = position(); markLoop(); };
   $('#btn-loop-clear').onclick = () => { P.loopA = P.loopB = null; markLoop(); };
 
-  $('.wave-wrap').onclick = (e) => {
+  const seekFromClick = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
     seek(((e.clientX - r.left) / r.width) * P.duration);
+  };
+  $('.wave-wrap').onclick = seekFromClick;
+  $('.notes-body').onclick = (e) => {
+    // Bos panelde dugmeye basiliyorsa konum degistirme
+    if (e.target.closest('button, a')) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const [t0, t1] = rollRange();
+    seek(t0 + ((e.clientX - r.left) / r.width) * (t1 - t0));
   };
 
   $('#btn-library').onclick = () => {
     pause();
     clearTimeout(analysisPoll);
+    clearTimeout(N.poll);
     $('#player').classList.add('hidden');
     $('#library').classList.remove('hidden');
     loadLibrary();
@@ -626,7 +813,7 @@ function initControls() {
     loadLibrary();
   };
 
-  window.addEventListener('resize', () => { drawWave(); render(); });
+  window.addEventListener('resize', () => { drawWave(); drawRoll(); render(); });
 
   document.addEventListener('keydown', (e) => {
     if ($('#player').classList.contains('hidden')) return;
