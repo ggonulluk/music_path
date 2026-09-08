@@ -697,6 +697,18 @@ function drawWave() {
    ==================================================================== */
 
 const meterBuf = new Float32Array(1024);
+const canvasSize = { wave: '', roll: '' };
+
+/* Canvas'lar esnek kutularda; olculeri layout'a gore degisiyor. Yeniden
+   cizim gerekip gerekmedigini boyut degisiminden anliyoruz - pencere
+   resize'i tek basina yetmiyor (kolonlar birbirine gore uzayip kisaliyor). */
+function checkCanvasSizes() {
+  const w = $('#wave'), r = $('#roll');
+  const ws = `${w.clientWidth}x${w.clientHeight}`;
+  const rs = `${r.clientWidth}x${r.clientHeight}`;
+  if (ws !== canvasSize.wave) { canvasSize.wave = ws; drawWave(); }
+  if (rs !== canvasSize.roll) { canvasSize.roll = rs; drawRoll(); }
+}
 
 function render() {
   const pos = position();
@@ -729,6 +741,7 @@ function render() {
 }
 
 function tick() {
+  checkCanvasSizes();
   render();
   for (const s of STEMS) {
     const a = P.analysers[s.id];

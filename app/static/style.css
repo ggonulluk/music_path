@@ -67,8 +67,14 @@ h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.3px;display:flex;alig
 .empty{color:var(--dim);text-align:center;padding:60px 20px;line-height:1.8}
 
 /* ---------------------------------------------------------------- player */
-#player{max-width:960px;margin:28px auto 60px;padding:0 24px}
+#player{max-width:1440px;margin:28px auto 60px;padding:0 24px}
 .now{margin-bottom:18px}
+
+/* Iki kolon: solda calma ve mikser, sagda notalar. Tek kolonda nota
+   paneli mikseri ekranin cok asagisina itiyordu. */
+.cols{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(330px,1fr);gap:16px}
+.col-main,.col-side{min-width:0}
+.col-side{display:flex}
 .now-title{font-size:21px;font-weight:600;letter-spacing:-.2px}
 .now-sub{color:var(--dim);font-size:13px;margin-top:4px}
 
@@ -117,10 +123,14 @@ h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.3px;display:flex;alig
   box-shadow:0 0 14px rgba(255,179,71,.35);
 }
 /* ---------------------------------------------------------- nota paneli */
-.notes-wrap{margin-top:8px}
-.notes-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.notes-wrap{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px;display:flex;flex-direction:column;gap:9px;width:100%;
+}
+.notes-head{display:flex;align-items:center;gap:10px}
+.notes-sub{display:flex;align-items:center;gap:8px;min-height:15px}
 .nlabel{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--dimmer)}
-.nstems{display:flex;gap:4px}
+.nstems{display:flex;gap:4px;flex-wrap:wrap}
 .nstem{
   background:var(--panel-2);border:1px solid var(--line);color:var(--dim);
   border-radius:6px;padding:3px 10px;font-size:12px;font-weight:600;
@@ -134,8 +144,8 @@ h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.3px;display:flex;alig
 .ghost.mini{padding:3px 10px;font-size:11.5px;text-decoration:none}
 
 .notes-body{
-  position:relative;height:132px;background:var(--panel);
-  border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+  position:relative;flex:1;min-height:300px;background:var(--bg);
+  border:1px solid var(--line);border-radius:9px;overflow:hidden;
   cursor:pointer;
 }
 #roll{width:100%;height:100%;display:block}
@@ -144,7 +154,7 @@ h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.3px;display:flex;alig
   gap:12px;color:var(--dim);font-size:13px;text-align:center;padding:0 20px;
 }
 .note-now{
-  display:flex;align-items:center;gap:6px;margin-top:7px;min-height:24px;
+  display:flex;align-items:center;gap:6px;min-height:26px;
   font-size:12px;color:var(--dim);flex-wrap:wrap;
 }
 .note-now .nn{
@@ -261,8 +271,14 @@ input[type=range].fader:hover::-webkit-slider-thumb{background:linear-gradient(1
 .bar{height:4px;background:var(--panel-2);border-radius:3px;overflow:hidden;margin-top:14px}
 #loading-bar{height:100%;width:0;background:var(--accent);transition:width .25s}
 
+/* Dar ekranda iki kolon sikisiyor; alt alta gecsin */
+@media(max-width:1060px){
+  .cols{grid-template-columns:minmax(0,1fr)}
+  .notes-body{min-height:190px}
+}
 @media(max-width:720px){
   .mixer{grid-template-columns:repeat(3,1fr)}
   .transport{justify-content:center}
   .master{margin-left:0;width:100%;justify-content:center}
+  .analysis{flex-direction:column}
 }

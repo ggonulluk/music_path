@@ -58,9 +58,9 @@ nerede olduğunu gözle bulmak için.
 
 ### Nota paneli
 
-Dalga formunun altındaki panel, seçtiğin kanaldan çıkarılan notaları piano roll
-olarak gösterir. İlk kez kullanırken **Notaları çıkar**'a basman gerekir
-(6 dakikalık bir kanal ~20 saniye).
+Sağdaki panel, seçtiğin kanaldan çıkarılan notaları piano roll olarak gösterir.
+İlk kez kullanırken **Notaları çıkar**'a basman gerekir (6 dakikalık bir kanal
+~20 saniye). Dar ekranda panel mikserin altına iner.
 
 - **Döngü açıkken panel o aralığa yakınlaşır.** Tüm şarkıyı göstermek 1700 notayı
   900 piksele sıkıştırıyor ve okunmuyor; asıl çalışma da döngü içinde olduğu için
