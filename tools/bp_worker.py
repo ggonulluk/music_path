@@ -25,6 +25,18 @@ BOUNDS = {
     "diger":  (55.0, 2100.0),
 }
 
+# General MIDI program numaralari. basic-pitch her seye varsayilan olarak
+# 4 (Electric Piano 1) yaziyor; gitar partisini piyanoyla dinlemek notalari
+# takip etmeyi zorlastiriyor. Gitar icin bilerek TEMIZ ton secildi -
+# distortion'li sesler MIDI sentezinde notalari birbirine karistiriyor.
+PROGRAMS = {
+    "gitar":  27,   # Electric Guitar (clean)
+    "bas":    33,   # Electric Bass (finger)
+    "vokal":  53,   # Voice Oohs
+    "piyano":  0,   # Acoustic Grand Piano
+    "diger":   4,   # Electric Piano 1
+}
+
 
 def main():
     src, out_json, out_mid, stem = sys.argv[1:5]
@@ -40,6 +52,9 @@ def main():
         minimum_frequency=lo,
         maximum_frequency=hi,
     )
+    for inst in midi.instruments:
+        inst.program = PROGRAMS.get(stem, 0)
+        inst.name = stem
     midi.write(out_mid)
 
     rows = [

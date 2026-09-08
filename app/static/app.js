@@ -602,6 +602,11 @@ function buildNoteStems(song) {
   }
 }
 
+/* Dosya adinda sorun cikaracak karakterleri temizle */
+function safeName(s) {
+  return String(s).replace(/[\\/:*?"<>|]/g, '_').trim() || 'stem';
+}
+
 async function loadNotes(song, stem) {
   clearTimeout(N.poll);
   N.song = song;
@@ -609,6 +614,13 @@ async function loadNotes(song, stem) {
   N.data = null;
   $('#note-midi').classList.add('hidden');
   $('#note-info').textContent = '';
+
+  // Kanalin ses dosyasi her zaman hazir - notalar cikarilmis olmasa da
+  const base = safeName(song.title || song.file.replace(/\.[^.]+$/, ''));
+  const au = $('#stem-audio');
+  au.href = `/audio/${song.id}/${stem}`;
+  au.download = `${base} - ${stem}.mp3`;
+
   drawRoll();
 
   const res = await fetch(`/api/songs/${song.id}/notes/${stem}`);
@@ -619,6 +631,7 @@ async function loadNotes(song, stem) {
       `${N.data.count} nota · ${N.data.low}–${N.data.high}`;
     const a = $('#note-midi');
     a.href = `/api/songs/${song.id}/midi/${stem}`;
+    a.download = `${base} - ${stem}.mid`;
     a.classList.remove('hidden');
     drawRoll();
     return;

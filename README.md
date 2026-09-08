@@ -68,7 +68,24 @@ Sağdaki panel, seçtiğin kanaldan çıkarılan notaları piano roll olarak gö
 - Sol kenardaki `e B G D A E` çizgileri açık tel perdeleri.
 - Panelin altında, oynatma kafasının o anda üzerinde olduğu notalar ve
   **tel/perde tahmini** yazar (`C3 A/3` = A teli 3. perde).
-- **MIDI indir** ile notaları MuseScore, Guitar Pro ya da bir DAW'da açabilirsin.
+### İki indirme düğmesi — karıştırma
+
+| Düğme | Ne verir | Ne için |
+|---|---|---|
+| **Ses** | Seçili kanalın **mp3'ü** (izole gitar, izole vokal…) | Dinlemek, telefona atmak, DAW'a almak |
+| **MIDI** | Sadece **nota verisi** | MuseScore / Guitar Pro / DAW'da notaya dökmek |
+
+**MIDI bir ses dosyası değildir.** İçinde "hangi an, hangi perde, ne kadar süre"
+bilgisi vardır; şarkının tonu, distortion'ı, tınısı yoktur. Oynatıcın onu kendi
+ses bankasıyla sentezler — bu yüzden gitar solosu bir MIDI oynatıcıda garip bir
+klavye sesi gibi duyulur. Bu bir hata değil, formatın doğası.
+
+Kanal başına makul bir General MIDI enstrümanı atanıyor (gitar → temiz elektro
+gitar, bas → elektrik bas, vokal → koro) ki en azından doğru enstrüman ailesinde
+duyulsun. **Gitar için bilerek temiz ton seçildi** — distortion'lı MIDI sesleri
+notaları birbirine karıştırıyor, oysa amaç notaları ayırt etmek.
+
+Şarkının gerçek gitar sesini duymak istiyorsan **Ses** düğmesini kullan.
 
 ### Akor rozeti
 
