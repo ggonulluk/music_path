@@ -1,0 +1,4 @@
+.venv/
+songs/
+stems/
+__pycache__/

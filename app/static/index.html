@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stem Player</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <h1><span class="dot"></span> Stem Player</h1>
+  <div class="head-right">
+    <button id="btn-library" class="ghost">Kitaplık</button>
+    <label class="ghost upload">
+      Şarkı ekle<input type="file" id="file-input" accept="audio/*" hidden>
+    </label>
+  </div>
+</header>
+
+<!-- ------------------------------------------------------------ KİTAPLIK -->
+<section id="library">
+  <div id="song-list"></div>
+  <p id="library-empty" class="empty hidden">
+    <code>songs\</code> klasörü boş. Yukarıdan şarkı ekle ya da mp3'lerini
+    doğrudan o klasöre kopyala.
+  </p>
+</section>
+
+<!-- ------------------------------------------------------------- OYNATICI -->
+<section id="player" class="hidden">
+
+  <div class="now">
+    <div class="now-title" id="now-title"></div>
+    <div class="now-sub" id="now-sub"></div>
+  </div>
+
+  <div class="wave-wrap">
+    <canvas id="wave"></canvas>
+    <div id="loop-band" class="loop-band hidden"></div>
+    <div id="playhead" class="playhead"></div>
+  </div>
+
+  <div class="timerow">
+    <span id="t-cur">0:00</span>
+    <span id="t-loop" class="t-loop"></span>
+    <div class="spacer"></div>
+    <span id="t-dur">0:00</span>
+  </div>
+
+  <div id="mixer" class="mixer"></div>
+
+  <div class="transport">
+    <button id="btn-back" class="tbtn" title="10 sn geri">↺</button>
+    <button id="btn-play" class="tbtn play" title="Boşluk tuşu">▶</button>
+    <button id="btn-fwd" class="tbtn" title="10 sn ileri">↻</button>
+
+    <div class="tsep"></div>
+
+    <div class="loopctl">
+      <button id="btn-a" class="tbtn small" title="Döngü başlangıcı">A</button>
+      <button id="btn-b" class="tbtn small" title="Döngü bitişi">B</button>
+      <button id="btn-loop-clear" class="tbtn small ghosty" title="Döngüyü temizle">✕</button>
+    </div>
+
+    <div class="tsep"></div>
+
+    <div class="master">
+      <span class="mlabel">Ana</span>
+      <input type="range" id="master" min="0" max="1.2" step="0.01" value="1">
+    </div>
+  </div>
+
+  <p class="hint">
+    <b>Boşluk</b> oynat/duraklat · <b>←/→</b> 5 sn · <b>A</b>/<b>B</b> döngü işareti
+    · <b>1–6</b> kanal sustur · <b>Shift+1–6</b> solo
+  </p>
+</section>
+
+<div id="loading" class="overlay hidden">
+  <div class="box">
+    <div class="spin"></div>
+    <div id="loading-text">Kanallar yükleniyor…</div>
+    <div class="bar"><div id="loading-bar"></div></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
