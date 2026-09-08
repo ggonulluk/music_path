@@ -1,7 +1,19 @@
 'use strict';
 
 /* Kanallar. Sira mikserdeki soldan saga sirayla ayni; gitar basta cunku
-   bu uygulamanin varlik sebebi o. */
+   bu uygulamanin varlik sebebi o.
+
+   SES MOTORU
+   ----------
+   Tek bir Signalsmith Stretch dugumu 12 kanal (6 stem x stereo) tasiyor.
+   Tum kanallar ayni gerdirme hesabindan gectigi icin aralarinda kayma
+   matematiksel olarak imkansiz - 6 ayri stretcher calistirsaydik kayma
+   riski olurdu.
+
+     stretch(12ch) -> splitter -> [merger -> analyser -> gain] x6 -> master
+
+   Fader'lar gerdirmeden SONRA uygulaniyor, olcerler fader'dan once. */
+
 const STEMS = [
   { id: 'gitar',  label: 'Gitar'  },
   { id: 'vokal',  label: 'Vokal'  },
@@ -69,9 +81,7 @@ function songRow(s) {
 
   el.querySelector('.song-title').textContent = s.title || s.file;
   el.querySelector('.song-meta').textContent =
-    s.state === 'running'
-      ? `${job.stage || ''} · %${pct}`
-      : meta.join(' · ');
+    s.state === 'running' ? `${job.stage || ''} · %${pct}` : meta.join(' · ');
 
   const act = el.querySelector('.song-act');
   if (s.state === 'ready') {
@@ -96,16 +106,18 @@ function songRow(s) {
 }
 
 /* ====================================================================
-   SES MOTORU
-   Her kanal:  AudioBufferSourceNode -> Analyser -> Gain -> Master
-   Olcer fader'dan ONCE: kanali kissan bile icinde ne oldugunu gorursun.
+   DURUM
    ==================================================================== */
 
 const P = {
-  ctx: null, buffers: {}, gains: {}, analysers: {}, sources: {},
-  master: null, playing: false, startedAt: 0, offset: 0, duration: 0,
-  loopA: null, loopB: null, song: null, raf: 0,
-  vol: {}, mute: {}, solo: {}, peaks: null, guitarEnv: null,
+  ctx: null, node: null, master: null,
+  gains: {}, analysers: {},
+  duration: 0, playing: false,
+  rate: 1, semitones: 0,
+  loopA: null, loopB: null,
+  vol: {}, mute: {}, solo: {},
+  peaks: null, guitarEnv: null,
+  lastInput: 0, lastInputAt: 0, raf: 0, song: null,
 };
 
 function anySolo() { return STEMS.some((s) => P.solo[s.id]); }
@@ -125,68 +137,82 @@ function loopActive() {
   return P.loopA !== null && P.loopB !== null && P.loopB - P.loopA > 0.05;
 }
 
+/* Motoru guncelle.
+
+   `input` bilerek atlaniyor: kutuphane, verilmediginde onceki segmentten
+   devam noktasini kendi hesapliyor. Her hiz degisiminde input gondermek
+   kucuk sicramalara yol acardi. Sadece seek'te aciktan veriyoruz. */
+function push(extra) {
+  if (!P.node) return;
+  const msg = {
+    active: P.playing,
+    rate: P.rate,
+    semitones: P.semitones,
+    loopStart: loopActive() ? P.loopA : 0,
+    loopEnd: loopActive() ? P.loopB : 0,
+    ...extra,
+  };
+  P.node.schedule(msg);
+}
+
 function position() {
-  if (!P.playing) return P.offset;
-  const elapsed = P.ctx.currentTime - P.startedAt;
+  let t = P.lastInput;
+  if (P.playing) t += (P.ctx.currentTime - P.lastInputAt) * P.rate;
   if (loopActive()) {
     const len = P.loopB - P.loopA;
-    const base = (P.offset >= P.loopA && P.offset < P.loopB) ? P.offset : P.loopA;
-    return P.loopA + (((base - P.loopA) + elapsed) % len);
+    if (t >= P.loopB) t = P.loopA + ((t - P.loopA) % len);
+    if (t < P.loopA) t = P.loopA;
   }
-  return Math.min(P.offset + elapsed, P.duration);
-}
-
-function startSources(at) {
-  for (const s of STEMS) {
-    const buf = P.buffers[s.id];
-    if (!buf) continue;
-    const src = P.ctx.createBufferSource();
-    src.buffer = buf;
-    if (loopActive()) {
-      src.loop = true;
-      src.loopStart = P.loopA;
-      src.loopEnd = P.loopB;
-    }
-    src.connect(P.analysers[s.id]);
-    src.start(0, at);
-    P.sources[s.id] = src;
-  }
-}
-
-function stopSources() {
-  for (const id in P.sources) {
-    try { P.sources[id].stop(); } catch (e) { /* zaten durmus */ }
-    P.sources[id].disconnect();
-  }
-  P.sources = {};
+  return Math.max(0, Math.min(t, P.duration));
 }
 
 async function play() {
   if (P.playing) return;
   if (P.ctx.state === 'suspended') await P.ctx.resume();
-  let at = P.offset;
-  if (loopActive() && (at < P.loopA || at >= P.loopB)) at = P.loopA;
+  let at = position();
   if (!loopActive() && at >= P.duration - 0.05) at = 0;
-  P.offset = at;
-  startSources(at);
-  P.startedAt = P.ctx.currentTime;
   P.playing = true;
+  push({ input: at });
+  P.lastInput = at;
+  P.lastInputAt = P.ctx.currentTime;
   $('#btn-play').textContent = '❚❚';
 }
 
 function pause() {
   if (!P.playing) return;
-  P.offset = position();
-  stopSources();
+  const at = position();
   P.playing = false;
+  push({ input: at });
+  P.lastInput = at;
+  P.lastInputAt = P.ctx.currentTime;
   $('#btn-play').textContent = '▶';
 }
 
 function seek(t) {
-  const was = P.playing;
-  if (was) { stopSources(); P.playing = false; }
-  P.offset = Math.max(0, Math.min(t, P.duration));
-  if (was) play(); else render();
+  const at = Math.max(0, Math.min(t, P.duration));
+  P.lastInput = at;
+  P.lastInputAt = P.ctx.currentTime;
+  push({ input: at });
+  render();
+}
+
+function setRate(r) {
+  P.rate = Math.max(0.25, Math.min(1.25, r));
+  // Once konumu sabitle, sonra hizi degistir: aksi halde interpolasyon
+  // eski hizla hesaplanmis kalir ve oynatma kafasi sicrar
+  P.lastInput = position();
+  P.lastInputAt = P.ctx.currentTime;
+  push({});
+  $('#rate-val').textContent = '%' + Math.round(P.rate * 100);
+  $('#rate').value = P.rate;
+  $('#btn-rate-reset').classList.toggle('set', Math.abs(P.rate - 1) > 0.001);
+}
+
+function setPitch(n) {
+  P.semitones = Math.max(-6, Math.min(6, Math.round(n)));
+  push({});
+  $('#pitch-val').textContent = (P.semitones > 0 ? '+' : '') + P.semitones;
+  $('#btn-pitch-reset').classList.toggle('set', P.semitones !== 0);
 }
 
 /* ====================================================================
@@ -200,7 +226,9 @@ async function openPlayer(song) {
   $('#now-title').textContent = song.title || song.file;
   $('#now-sub').textContent = [song.artist, song.file].filter(Boolean).join(' · ');
   $('#loading').classList.remove('hidden');
+  $('#loading-bar').style.width = '0%';
 
+  cancelAnimationFrame(P.raf);
   if (!P.ctx) {
     P.ctx = new (window.AudioContext || window.webkitAudioContext)();
     P.master = P.ctx.createGain();
@@ -208,35 +236,81 @@ async function openPlayer(song) {
     P.master.connect(P.ctx.destination);
   }
 
-  stopSources();
+  // Onceki sarkinin dugumunu tamamen birak; 900 MB'lik WASM belleginin
+  // serbest kalmasi icin sart
+  if (P.node) {
+    try { P.node.schedule({ active: false }); P.node.disconnect(); } catch (e) { /* yok say */ }
+    P.node = null;
+  }
   P.playing = false;
-  P.offset = 0;
+  P.lastInput = 0;
+  P.duration = 0;          // yoksa onceki (daha uzun) sarkinin suresi kalir
   P.loopA = P.loopB = null;
-  P.buffers = {};
+  $('#btn-play').textContent = '▶';
+
+  const ch = STEMS.length * 2;
+  P.node = await SignalsmithStretch(P.ctx, {
+    numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [ch],
+  });
+  P.node.onprocessorerror = () => {
+    $('#loading-text').textContent = 'Ses motoru hatası — sayfayı yenile.';
+    $('#loading').classList.remove('hidden');
+  };
 
   buildMixer();
 
-  // Kanallari sirayla indir + coz. Sirayla, cunku es zamanli cozme
-  // bellek tepesini gereksiz yukseltiyor.
+  // Stem'leri sirayla indir + coz. Es zamanli cozmek bellek tepesini
+  // gereksiz yukseltiyor.
+  const channels = [];
+  const envs = [];
   for (let i = 0; i < STEMS.length; i++) {
     const s = STEMS[i];
     $('#loading-text').textContent = `${s.label} yükleniyor… (${i + 1}/${STEMS.length})`;
-    $('#loading-bar').style.width = ((i / STEMS.length) * 100) + '%';
-    const buf = await fetch(`/audio/${song.id}/${s.id}`).then((r) => r.arrayBuffer());
-    P.buffers[s.id] = await P.ctx.decodeAudioData(buf);
+    $('#loading-bar').style.width = ((i / (STEMS.length + 1)) * 100) + '%';
+    const ab = await fetch(`/audio/${song.id}/${s.id}`).then((r) => r.arrayBuffer());
+    const buf = await P.ctx.decodeAudioData(ab);
+    const L = buf.getChannelData(0);
+    const R = buf.numberOfChannels > 1 ? buf.getChannelData(1) : L;
+    channels.push(L, R);
+    envs.push(envelopeOf(L, WAVE_BINS));   // dalga formunu simdi hesapla
+    P.duration = Math.max(P.duration, buf.duration);
   }
+
+  $('#loading-text').textContent = 'Ses motoruna aktarılıyor…';
+  $('#loading-bar').style.width = ((STEMS.length / (STEMS.length + 1)) * 100) + '%';
+  await P.node.addBuffers(channels);
+  channels.length = 0;   // AudioBuffer referanslarini birak
+
   $('#loading-bar').style.width = '100%';
+  await P.node.setUpdateInterval(0.05, (t) => {
+    P.lastInput = t;
+    P.lastInputAt = P.ctx.currentTime;
+  });
 
-  P.duration = Math.max(...STEMS.map((s) => P.buffers[s.id]?.duration || 0));
+  wireOutput(ch);
   $('#t-dur').textContent = fmt(P.duration);
-
-  computePeaks();
+  computePeaks(envs);
   drawWave();
   applyGains();
+  setRate(P.rate);
+  setPitch(P.semitones);
+  push({ input: 0 });
   $('#loading').classList.add('hidden');
-
-  cancelAnimationFrame(P.raf);
   tick();
+}
+
+/* 12 kanali 6 stereo cifte ayir, her cifte olcer ve fader tak. */
+function wireOutput(ch) {
+  const split = P.ctx.createChannelSplitter(ch);
+  P.node.connect(split);
+  STEMS.forEach((s, i) => {
+    const merge = P.ctx.createChannelMerger(2);
+    split.connect(merge, i * 2, 0);
+    split.connect(merge, i * 2 + 1, 1);
+    merge.connect(P.analysers[s.id]);
+    P.analysers[s.id].connect(P.gains[s.id]);
+    P.gains[s.id].connect(P.master);
+  });
 }
 
 function buildMixer() {
@@ -249,10 +323,8 @@ function buildMixer() {
 
     const g = P.ctx.createGain();
     g.gain.value = P.vol[s.id];
-    g.connect(P.master);
     const a = P.ctx.createAnalyser();
     a.fftSize = 1024;
-    a.connect(g);
     P.gains[s.id] = g;
     P.analysers[s.id] = a;
 
@@ -295,15 +367,13 @@ function buildMixer() {
 
 /* ====================================================================
    DALGA FORMU
-   Toplam miksin zarfi + uzerine gitar kanalinin zarfi.
-   Gitarin nerede calindigini gozle gormek, calisirken bolum bulmayi
-   ciddi kolaylastiriyor.
+   Toplam miksin zarfi + uzerine gitar kanalinin zarfi. Gitarin nerede
+   calindigini gozle gormek, calisirken bolum bulmayi kolaylastiriyor.
    ==================================================================== */
 
 const WAVE_BINS = 900;
 
-function envelopeOf(buffer, bins) {
-  const data = buffer.getChannelData(0);
+function envelopeOf(data, bins) {
   const n = data.length;
   const per = Math.floor(n / bins) || 1;
   const out = new Float32Array(bins);
@@ -319,13 +389,9 @@ function envelopeOf(buffer, bins) {
   return out;
 }
 
-function computePeaks() {
-  const envs = STEMS.map((s) => P.buffers[s.id] ? envelopeOf(P.buffers[s.id], WAVE_BINS) : null);
+function computePeaks(envs) {
   const mix = new Float32Array(WAVE_BINS);
-  for (const e of envs) {
-    if (!e) continue;
-    for (let i = 0; i < WAVE_BINS; i++) mix[i] += e[i];
-  }
+  for (const e of envs) for (let i = 0; i < WAVE_BINS; i++) mix[i] += e[i];
   let max = 0;
   for (let i = 0; i < WAVE_BINS; i++) if (mix[i] > max) max = mix[i];
   if (max > 0) for (let i = 0; i < WAVE_BINS; i++) mix[i] /= max;
@@ -333,9 +399,9 @@ function computePeaks() {
 
   const gi = STEMS.findIndex((s) => s.id === 'gitar');
   const g = envs[gi];
-  if (g) {
+  if (g && max > 0) {
     const gg = new Float32Array(WAVE_BINS);
-    for (let i = 0; i < WAVE_BINS; i++) gg[i] = max > 0 ? g[i] / max : 0;
+    for (let i = 0; i < WAVE_BINS; i++) gg[i] = g[i] / max;
     P.guitarEnv = gg;
   } else P.guitarEnv = null;
 }
@@ -351,7 +417,6 @@ function drawWave() {
   if (!P.peaks) return;
 
   const mid = h / 2, bw = w / WAVE_BINS;
-
   c.fillStyle = '#3a4152';
   for (let i = 0; i < WAVE_BINS; i++) {
     const a = Math.max(1, P.peaks[i] * (h * 0.46));
@@ -404,20 +469,29 @@ function tick() {
     a.getFloatTimeDomainData(meterBuf);
     let sum = 0;
     for (let i = 0; i < meterBuf.length; i++) sum += meterBuf[i] * meterBuf[i];
-    const rms = Math.sqrt(sum / meterBuf.length);
-    const db = 20 * Math.log10(Math.max(rms, 1e-6));
+    const db = 20 * Math.log10(Math.max(Math.sqrt(sum / meterBuf.length), 1e-6));
     bar.style.height = Math.max(0, Math.min(100, (db + 60) / 60 * 100)) + '%';
   }
-  if (P.playing && !loopActive() && position() >= P.duration - 0.03) {
-    pause();
-    P.offset = 0;
-  }
+  if (P.playing && !loopActive() && position() >= P.duration - 0.05) pause();
   P.raf = requestAnimationFrame(tick);
 }
 
 /* ====================================================================
    KONTROLLER
    ==================================================================== */
+
+function markLoop() {
+  // A > B girildiyse sessizce takasla; kullaniciyi uyarmaya degmez
+  if (P.loopA !== null && P.loopB !== null && P.loopA > P.loopB) {
+    const t = P.loopA; P.loopA = P.loopB; P.loopB = t;
+  }
+  $('#btn-a').classList.toggle('set', P.loopA !== null);
+  $('#btn-b').classList.toggle('set', P.loopB !== null);
+  P.lastInput = position();
+  P.lastInputAt = P.ctx.currentTime;
+  push({});
+  render();
+}
 
 function initControls() {
   $('#btn-play').onclick = () => (P.playing ? pause() : play());
@@ -427,6 +501,12 @@ function initControls() {
   $('#master').oninput = (e) => {
     if (P.master) P.master.gain.value = parseFloat(e.target.value);
   };
+
+  $('#rate').oninput = (e) => setRate(parseFloat(e.target.value));
+  $('#btn-rate-reset').onclick = () => setRate(1);
+  $('#btn-pitch-dn').onclick = () => setPitch(P.semitones - 1);
+  $('#btn-pitch-up').onclick = () => setPitch(P.semitones + 1);
+  $('#btn-pitch-reset').onclick = () => setPitch(0);
 
   $('#btn-a').onclick = () => { P.loopA = position(); markLoop(); };
   $('#btn-b').onclick = () => { P.loopB = position(); markLoop(); };
@@ -464,8 +544,12 @@ function initControls() {
     if (e.code === 'Space') { e.preventDefault(); P.playing ? pause() : play(); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); seek(position() - 5); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); seek(position() + 5); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); setRate(P.rate - 0.05); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setRate(P.rate + 0.05); }
     else if (e.key === 'a' || e.key === 'A') { P.loopA = position(); markLoop(); }
     else if (e.key === 'b' || e.key === 'B') { P.loopB = position(); markLoop(); }
+    else if (e.key === '-' || e.key === '_') setPitch(P.semitones - 1);
+    else if (e.key === '+' || e.key === '=') setPitch(P.semitones + 1);
     else if (n >= 1 && n <= 6) {
       const s = STEMS[n - 1];
       const sel = e.shiftKey ? 'solo' : 'mute';
@@ -475,18 +559,6 @@ function initControls() {
       applyGains();
     }
   });
-}
-
-function markLoop() {
-  // A > B girildiyse sessizce takasla; kullaniciyi uyarmaya degmez
-  if (P.loopA !== null && P.loopB !== null && P.loopA > P.loopB) {
-    const t = P.loopA; P.loopA = P.loopB; P.loopB = t;
-  }
-  $('#btn-a').classList.toggle('set', P.loopA !== null);
-  $('#btn-b').classList.toggle('set', P.loopB !== null);
-  // Dongu sinirlari degistiyse kaynaklari yeniden kur
-  if (P.playing) { const t = position(); stopSources(); P.playing = false; P.offset = t; play(); }
-  render();
 }
 
 initControls();

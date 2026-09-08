@@ -36,9 +36,22 @@ beklemezsin.
 |---|---|
 | `Boşluk` | Oynat / duraklat |
 | `←` `→` | 5 saniye geri / ileri |
+| `↑` `↓` | Hızı %5 artır / azalt |
 | `A` / `B` | Döngü başlangıcı / bitişi işaretle |
+| `−` / `+` | Perdeyi yarım ton indir / çıkar |
 | `1`–`6` | O kanalı sustur |
 | `Shift`+`1`–`6` | O kanalı solo yap |
+
+### Çalışma kontrolleri
+
+**Hız** %25–%125 arası ayarlanır ve **ses perdesi bozulmaz** — solo'yu yarı
+hızda çalışıp yavaşça hızlandırabilirsin. **Perde** ±6 yarım ton kaydırılır;
+şarkı Eb akortsa gitarını sökmeden bir ton indirip çalabilirsin. İkisi
+birbirinden bağımsız: hızı değiştirmek perdeyi, perdeyi değiştirmek hızı
+etkilemez.
+
+Döngü (A/B) yavaşlatmayla birlikte çalışır — asıl kullanım şekli de budur:
+4 ölçüyü işaretle, %50 hıza al, parmakların öğrenene kadar tekrar et.
 
 Dalga formunda **turuncu olan gitar kanalının seviyesi** — solonun ya da riff'in
 nerede olduğunu gözle bulmak için.
@@ -75,17 +88,31 @@ Modu değiştirmek için: `POST /api/songs/{id}/separate?mode=fast`
 app\
   main.py         FastAPI: kitaplık, iş kuyruğu API'si, ses servisi
   separator.py    Demucs motoru — tek işçi thread'li kuyruk, ilerleme takibi
-  static\         Arayüz (saf JS + Web Audio API, bağımlılık yok)
+  static\         Arayüz (saf JS + Web Audio API)
+    vendor\       signalsmith-stretch (MIT) — bkz. vendor\NOTICE.md
 songs\            Kaynak müzik dosyaların
 stems\            Ayrılmış kanallar (şarkı başına bir klasör, 192 kbps mp3)
 tools\
   separate_test.py   Komut satırından ayırma
   analyze_stems.py   Kanalların enerji analizi
+  analyze_music.py   Ton, gam, tempo, akor tespiti
 ```
 
-Oynatma tarafı Web Audio API üzerinde: her kanal kendi `GainNode`'una bağlı ve
-altı kaynak da tek `AudioContext` saatinden başlatılıyor, yani kanallar arasında
-kayma olmaz.
+### Ses motoru
+
+Tek bir Signalsmith Stretch düğümü **12 kanal** taşıyor (6 stem × stereo):
+
+```
+stretch(12ch) → splitter → [merger → ölçer → fader] ×6 → ana çıkış
+```
+
+Bütün kanallar aynı gerdirme hesabından geçtiği için aralarında kayma
+*matematiksel olarak* imkânsız. Altı ayrı stretcher çalıştırmak daha basit
+olurdu ama zamanla ayrışma riski taşırdı. Fader'lar gerdirmeden sonra,
+seviye göstergeleri fader'dan önce.
+
+Ölçüm: %50 hızda oran tam 0.500, perde ±2 yarım ton kaydırıldığında hız
+oranı 0.502 — ikisi gerçekten bağımsız.
 
 ## Ortamı başka bilgisayarda kurmak
 
@@ -108,14 +135,19 @@ PyTorch'un işlemci sürümü gerekiyorsa:
 - 6 kanallı mikser: fader, sustur, solo, seviye göstergesi
 - Dalga formu (gitar vurgulu), tıklayarak konum değiştirme
 - A/B döngü
+- **Tempo yavaşlatma, ses perdesi bozulmadan** (%25–%125)
+- **Perde kaydırma** (±6 yarım ton)
 - Klavye kısayolları
+- Ton / gam / tempo / akor analizi (`tools/analyze_music.py`)
 
-**Sırada (Faz 3) — öğrenme için asıl kritik olanlar**
+**Sırada**
 
-- **Tempo yavaşlatma, ses perdesi bozulmadan.** Solo çalışmanın en önemli aracı.
-  Web Audio'nun `playbackRate`'i perdeyi de değiştirdiği için gerçek bir
-  time-stretcher gerekiyor (`signalsmith-stretch` WASM adayı).
-- **Perde kaydırma.** Şarkı Eb akortsa gitarı sökmeden dinleyebilmek için.
+- Analiz sonucunu arayüze taşımak: şarkı açılınca ton, gam ve pentatonik
+  bilgi şeridi. Ölçüldü ve güvenilir.
+- Nota transkripsiyonu (`basic-pitch`). Ayrı venv'de test edildi, izole
+  gitar kanalında iyi sonuç veriyor (E minör gamına uyum %91). Kanal
+  başına "notaları çıkar" düğmesi olarak eklenecek.
+- Akor şeridi — dalga formunun üstünde, "tahmin" olduğu belirtilerek
 - Bölüm işaretleri (intro / verse / solo) ve döngüleri kaydetme
 - Sayım metronomu
 
