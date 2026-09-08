@@ -150,8 +150,12 @@ Nota çıkarma ortamını kurmak (isteğe bağlı — yoksa panel bunu söyler):
 
 ```
 python -m venv .venv-transcribe
-.venv-transcribe\Scripts\python.exe -m pip install basic-pitch
+.venv-transcribe\Scripts\python.exe -m pip install -r requirements-transcribe.txt
 ```
+
+İki ortamın da paket listesi sabitlenmiş: `requirements.txt` ve
+`requirements-transcribe.txt`. Tek `.exe` paketleme bu kayıtlar olmadan
+tekrarlanabilir olmaz.
 
 ### Ses motoru
 
@@ -168,6 +172,25 @@ seviye göstergeleri fader'dan önce.
 
 Ölçüm: %50 hızda oran tam 0.500, perde ±2 yarım ton kaydırıldığında hız
 oranı 0.502 — ikisi gerçekten bağımsız.
+
+### Performans kararları
+
+Bunlar bilinçli; "sadeleştirmek" isteyen biri farkında olmalı.
+
+**İlerleme yoklaması `/api/jobs`'a gider, `/api/songs`'a değil.** `/api/songs`
+her istekte kütüphaneyi diskten yeniden kurar — şarkı başına ~12 ms etiket
+ayrıştırma (ölçüldü). 100 şarkılık bir kütüphanede bu 1.3 saniye eder ve
+1.5 saniyede bir yoklamak işlemciyi sürekli meşgul bırakır. `/api/jobs`
+tamamen bellekte, ~2 ms, kütüphane boyutundan bağımsız. Kütüphane listesi
+yalnızca bir iş bittiğinde tazelenir; ilerleme çubuğu yerinde güncellenir.
+
+**Etiket önbelleği `(mtime, boyut)` anahtarlı.** Dosya değişirse damga tutmaz
+ve kendiliğinden tazelenir — elle geçersiz kılmaya gerek yok.
+
+**Nota paneli okuma alanı sabit yükseklikte (106 px).** Akor rozeti ve nota
+çipleri saniyede değişiyor; yükseklik serbest bırakılırsa panel zıplıyor ve
+`flex:1` olan piano roll her seferinde yeniden boyutlanıp çiziliyor. Rozet
+akor yokken gizlenmez, boşalır.
 
 ## Ortamı başka bilgisayarda kurmak
 

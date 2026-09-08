@@ -129,8 +129,13 @@
           <div id="roll-head" class="playhead"></div>
           <div id="note-empty" class="nempty"></div>
         </div>
-        <div id="chord-badge" class="chord hidden"></div>
-        <div id="note-now" class="note-now"></div>
+        <!-- Sabit yukseklikli okuma alani. Icerigi saniyede degistigi icin
+             yuksekligi serbest birakilirsa panel surekli zipliyor ve
+             flex:1 olan piano roll her seferinde yeniden boyutlaniyor. -->
+        <div class="readout">
+          <div id="chord-badge" class="chord empty"></div>
+          <div id="note-now" class="note-now"></div>
+        </div>
       </div>
     </aside>
 

@@ -98,7 +98,15 @@ const fmt = (t) => {
    ==================================================================== */
 
 let pollTimer = null;
+const jobStates = {};        // is anahtari -> son gorulen durum
 
+/* Ilerleme yoklamasi /api/jobs'a gidiyor, /api/songs'a degil.
+
+   /api/songs her istekte kutuphaneyi diskten yeniden kuruyor: sarki basina
+   ~12 ms etiket ayristirma (olculdu). 100 sarkilik bir kutuphanede bu 1.3
+   saniye eder ve 1.5 saniyede bir yoklamak CPU'yu surekli mesgul birakir.
+   /api/jobs tamamen bellekte, ~3 ms, kutuphane boyutundan bagimsiz.
+   Kutuphane listesi ise yalnizca bir is bittiginde tazelenir. */
 async function loadLibrary() {
   const songs = await fetch('/api/songs').then((r) => r.json());
   const list = $('#song-list');
@@ -112,12 +120,49 @@ async function loadLibrary() {
   }
 
   clearTimeout(pollTimer);
-  if (busy) pollTimer = setTimeout(loadLibrary, 1500);
+  if (busy) pollTimer = setTimeout(pollJobs, 1500);
+}
+
+async function pollJobs() {
+  clearTimeout(pollTimer);
+  let jobs;
+  try {
+    jobs = await fetch('/api/jobs').then((r) => r.json());
+  } catch (e) {
+    pollTimer = setTimeout(pollJobs, 3000);
+    return;
+  }
+
+  let busy = false, finished = false;
+  for (const [key, j] of Object.entries(jobs)) {
+    if (j.state === 'queued' || j.state === 'running') busy = true;
+    const prev = jobStates[key];
+    if (prev && prev !== j.state && (j.state === 'done' || j.state === 'error')) {
+      finished = true;
+    }
+    jobStates[key] = j.state;
+  }
+
+  // Ilerleme cubugunu yerinde guncelle - liste yeniden kurulmuyor
+  for (const j of Object.values(jobs)) {
+    if (j.kind !== 'separate') continue;
+    const row = document.querySelector(`.song[data-song="${j.song_id}"]`);
+    if (!row) continue;
+    const pct = Math.round((j.progress || 0) * 100);
+    const bar = row.querySelector('.prog > i');
+    if (bar) bar.style.width = pct + '%';
+    const meta = row.querySelector('.song-meta');
+    if (meta && j.state === 'running') meta.textContent = `${j.stage || ''} · %${pct}`;
+  }
+
+  if (finished) { loadLibrary(); return; }   // loadLibrary yeniden zamanlar
+  if (busy) pollTimer = setTimeout(pollJobs, 1500);
 }
 
 function songRow(s) {
   const el = document.createElement('div');
   el.className = 'song';
+  el.dataset.song = s.id;      // pollJobs ilerlemeyi bu satirda gunceller
 
   const label = {
     ready: 'hazır', raw: 'ayrılmadı', running: 'ayrılıyor',
@@ -686,7 +731,10 @@ function drawRoll() {
 function renderNoteNow(pos) {
   const box = $('#note-now');
   const badge = $('#chord-badge');
-  if (!N.data) { box.innerHTML = ''; badge.className = 'chord hidden'; return; }
+  // Rozet hicbir zaman gizlenmiyor, sadece bosaliyor: gizlemek yuksekligi
+  // degistirip panelin zipllamasina yol aciyordu
+  const blank = () => { badge.className = 'chord empty'; badge.innerHTML = ''; };
+  if (!N.data) { box.innerHTML = ''; blank(); return; }
 
   const live = N.data.notes.filter(([s, e]) => s <= pos && pos < e);
   const anChord = analysisChordAt(pos);
@@ -699,7 +747,7 @@ function renderNoteNow(pos) {
       badge.className = 'chord only-analysis';
       badge.innerHTML = `<span class="cname">${anChord}</span>
         <span class="csub">analiz</span>`;
-    } else badge.className = 'chord hidden';
+    } else blank();
     return;
   }
 
@@ -715,7 +763,7 @@ function renderNoteNow(pos) {
       <span class="csub">${ch.notes.join(' ')}${ch.exact ? '' : ' · yaklaşık'}${
         anChord ? (agree ? ' · analiz ✓' : ` · analiz: ${anChord}`) : ''}</span>`;
   } else {
-    badge.className = 'chord hidden';
+    blank();
   }
 
   box.innerHTML = live.slice(0, 6).map(([, , p]) => {

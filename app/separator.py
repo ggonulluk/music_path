@@ -24,6 +24,9 @@ STEMS = ROOT / "stems"
 # ve sarki basina ~96 MB yerine ~58 MB'a indiriyor.
 BITRATE = 192
 
+# Bellekte tutulacak bitmis is sayisi
+KEEP_FINISHED = 40
+
 TR = {
     "vocals": "vokal",
     "drums": "davul",
@@ -118,6 +121,21 @@ class SeparationQueue:
         sep.update_parameter(callback=on_progress)
         return sep
 
+    def _prune(self) -> None:
+        """Bitmis isleri sinirli tut.
+
+        Arayuz ilerlemeyi /api/jobs'tan yokluyor; budanmazsa uzun bir
+        oturumda o yanit surekli sisen bir listeye donusur.
+        """
+        with self._lock:
+            done = [(k, j) for k, j in self._jobs.items()
+                    if j.state in ("done", "error")]
+            if len(done) <= KEEP_FINISHED:
+                return
+            done.sort(key=lambda kv: kv[1].finished_at or 0)
+            for k, _ in done[: len(done) - KEEP_FINISHED]:
+                self._jobs.pop(k, None)
+
     def _run(self) -> None:
         while True:
             job = self._q.get()
@@ -128,6 +146,7 @@ class SeparationQueue:
                 job.error = traceback.format_exc(limit=3)
                 job.finished_at = time.time()
             finally:
+                self._prune()
                 self._q.task_done()
 
     def _process(self, job: Job) -> None:

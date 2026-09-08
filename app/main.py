@@ -37,7 +37,24 @@ def scan() -> dict[str, Path]:
     }
 
 
+# Etiket ayristirma sarki basina ~12 ms ve /api/songs maliyetinin %93'u.
+# (mtime, boyut) anahtarli onbellek: dosya degisirse damga tutmaz ve
+# kendiliginden tazelenir, elle gecersiz kilmaya gerek yok.
+_meta_cache: dict[str, tuple] = {}
+
+
 def metadata(path: Path) -> dict:
+    key = str(path)
+    try:
+        st = path.stat()
+        stamp = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        stamp = None
+
+    hit = _meta_cache.get(key)
+    if hit and stamp and hit[0] == stamp:
+        return hit[1]
+
     title, artist, duration = path.stem, None, None
     try:
         tags = MutagenFile(path, easy=True)
@@ -48,10 +65,18 @@ def metadata(path: Path) -> dict:
             artist = (tags.get("artist") or [None])[0]
     except Exception:
         pass
-    return {"title": title, "artist": artist, "duration": duration}
+
+    out = {"title": title, "artist": artist, "duration": duration}
+    if stamp:
+        _meta_cache[key] = (stamp, out)
+    return out
 
 
-def describe(sid: str, path: Path) -> dict:
+def describe(sid: str, path: Path, can_tr: bool | None = None) -> dict:
+    # can_tr istek basina bir kez hesaplanip gecilir; sarkiya bagli degil
+    # (sadece .venv-transcribe ve bp_worker.py varligina bakiyor)
+    if can_tr is None:
+        can_tr = transcribe.available()
     out = STEMS / path.stem
     available = [s for s in STEM_ORDER if (out / f"{s}.mp3").exists()]
     job = QUEUE.get(sid, "separate")
@@ -73,7 +98,7 @@ def describe(sid: str, path: Path) -> dict:
         "analysis": analysis.cache_path(out).exists(),
         "notes": [s for s in transcribe.TRANSCRIBABLE
                   if transcribe.json_path(out, s).exists()],
-        "can_transcribe": transcribe.available(),
+        "can_transcribe": can_tr,
         **metadata(path),
     }
     if job:
@@ -88,7 +113,8 @@ def describe(sid: str, path: Path) -> dict:
 
 @app.get("/api/songs")
 def list_songs():
-    return [describe(sid, p) for sid, p in scan().items()]
+    can_tr = transcribe.available()
+    return [describe(sid, p, can_tr) for sid, p in scan().items()]
 
 
 @app.get("/api/songs/{sid}")
