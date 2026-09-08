@@ -1,4 +1,5 @@
 .venv/
+.venv-transcribe/
 songs/
 stems/
 __pycache__/
