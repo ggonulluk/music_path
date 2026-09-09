@@ -178,6 +178,36 @@ gösterilir — pentatonikle solo yaparken altta zaten o akorlar çalar.
 **Şarkının tonu.** Bir şarkı açıksa düğme görünür ve analizin bulduğu tona
 atlar. Şarkı açık değilse gizli kalır.
 
+### Akor basılışları
+
+Cetveldeki bir akora tıklayınca **klavye boyunca 4-5 farklı pozisyondaki
+basılış şekli** diyagram olarak çıkar: `x32010`, `8755xx`, `8-10-10-9-8-8`…
+Her diyagramın altında pozisyon, parmak sayısı ve barre gerekip gerekmediği
+yazar.
+
+Üretici gerçek gitar kısıtlarını uyguluyor:
+
+- Akorun bütün sesleri bulunmalı (kök, üçlü, beşli)
+- El açıklığı 4 perdeyi geçemez
+- Parmak sayısı 4'ü geçemez
+
+**Barre kuralı ayrı bir incelik.** Aynı perdeye basılmış iki telin *arasında*
+daha yüksek perdeye basılmış bir tel varsa, o iki teli ayrı parmaklarla
+tutmak mümkün değil — tek çözüm işaret parmağını yatırmak. Ama barre ancak
+şeklin en düşük perdesinde kurulabilir ve barre aralığında boş tel olamaz
+(işaret parmağı onu da bastırır). Bu kural olmadan `10321x` gibi fiziksel
+olarak basılamayan şekiller üretiliyordu.
+
+Puanlama gerçek gitar tercihlerini taklit ediyor: kök notanın basta olması,
+çok telin duyması, boş tel ve düşük pozisyon iyi; ortadaki teli susturmak,
+çok parmak ve gerilme kötü.
+
+**Doğrulama:** üreteç 13 bilinen akor şekliyle sınandı ve hepsini buluyor —
+`C=x32010`, `G=320003`, `D=xx0232`, `A=x02220`, `E=022100`, `Am=x02210`,
+`Em=022000`, `Dm=xx0231`, `F=133211`, `Bm=x24432`, `B=x24442`, `E7=020100`,
+`A7=x02020`. Bu şekiller gitar kitaplarında sabittir; çıkmıyorsa algoritma
+yanlıştır.
+
 ### Derece adlandırmasında bir incelik
 
 7 notalı gamlarda derece adı **aralıktan değil gamdaki konumdan** gelir.

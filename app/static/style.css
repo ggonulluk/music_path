@@ -237,6 +237,30 @@ h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.3px;display:flex;alig
 .sc-chord.dim b{color:#ff8fa3}
 .sc-chord.aug b{color:#d9a3ff}
 .sc-note{font-size:11.5px;color:var(--dimmer)}
+.sc-chord{cursor:pointer;transition:.12s}
+.sc-chord:hover{border-color:#4a5364}
+.sc-chord.on{background:#3a2a10;border-color:#7a5c1c}
+
+/* akor basilis diyagramlari */
+.sc-voicings{
+  display:flex;gap:12px;flex-wrap:wrap;width:100%;margin-top:6px;
+  padding-top:14px;border-top:1px dashed var(--line);
+}
+.vc{
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:10px 8px 8px;text-align:center;width:116px;
+}
+.vc canvas{width:100px;height:110px;display:block;margin:0 auto}
+.vc-txt{
+  font:12px ui-monospace,Consolas,monospace;color:var(--fg);
+  margin-top:6px;letter-spacing:.4px;
+}
+.vc-sub{font-size:10.5px;color:var(--dimmer);margin-top:2px}
+.vc-head{
+  width:100%;display:flex;align-items:baseline;gap:9px;margin-bottom:2px;
+}
+.vc-head b{font-size:15px}
+.vc-head span{font-size:11.5px;color:var(--dimmer)}
 
 @media(max-width:640px){
   .sc-board{height:200px}

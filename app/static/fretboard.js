@@ -319,5 +319,89 @@ function drawFretboard(cv, opts) {
   }
 }
 
+/* Akor diyagrami: gitar kitaplarindaki dikey kutu.
+
+   frets  6 elemanli dizi, kalindan inceye. null = susturulmus, 0 = bos tel.
+   barre  barre yapilan perde (0 = yok)
+
+   Yatay klavyeden ayri bir cizim cunku akor sekli farkli okunuyor:
+   burada onemli olan seklin kendisi, klavyedeki konumu degil. */
+function drawChordDiagram(cv, frets, opts = {}) {
+  const { barre = 0, color = '#ffb347' } = opts;
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const c = cv.getContext('2d');
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, w, h);
+
+  const fretted = frets.filter((f) => f !== null && f > 0);
+  const maxF = fretted.length ? Math.max(...fretted) : 1;
+  const minF = fretted.length ? Math.min(...fretted) : 1;
+  // 4 perdeye siganlar esikten baslasin; yukarilar kendi perdesinden
+  const start = maxF <= 4 ? 1 : minF;
+  const NF = 4;
+
+  const padT = 20, padB = 8;
+  const padL = start > 1 ? 24 : 13, padR = 13;
+  const gw = (w - padL - padR) / 5;          // 6 tel = 5 aralik
+  const gh = (h - padT - padB) / NF;
+  const xOf = (s) => padL + s * gw;
+  const yMid = (f) => padT + (f - start) * gh + gh / 2;
+  const r = Math.min(gw, gh) * 0.34;
+
+  // esik ya da perde numarasi
+  if (start === 1) {
+    c.fillStyle = '#8a93a6';
+    c.fillRect(padL - 1, padT - 3, gw * 5 + 2, 3);
+  } else {
+    c.fillStyle = '#5b6273';
+    c.font = '11px ui-monospace,Consolas,monospace';
+    c.textAlign = 'right'; c.textBaseline = 'middle';
+    c.fillText(String(start), padL - 7, yMid(start));
+  }
+
+  c.strokeStyle = '#333a49';
+  c.lineWidth = 1;
+  for (let f = 1; f <= NF; f++) {
+    const y = padT + f * gh;
+    c.beginPath(); c.moveTo(padL, y); c.lineTo(padL + gw * 5, y); c.stroke();
+  }
+  for (let s = 0; s < 6; s++) {
+    c.beginPath(); c.moveTo(xOf(s), padT); c.lineTo(xOf(s), padT + gh * NF); c.stroke();
+  }
+
+  // ustteki O / X isaretleri
+  c.font = '10px ui-sans-serif,Segoe UI,sans-serif';
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  for (let s = 0; s < 6; s++) {
+    if (frets[s] === null) { c.fillStyle = '#6a7385'; c.fillText('×', xOf(s), padT - 10); }
+    else if (frets[s] === 0) { c.fillStyle = '#9aa3b4'; c.fillText('○', xOf(s), padT - 10); }
+  }
+
+  // barre cubugu
+  if (barre) {
+    const ss = [];
+    frets.forEach((f, s) => { if (f === barre) ss.push(s); });
+    if (ss.length > 1) {
+      const y = yMid(barre);
+      c.fillStyle = color;
+      c.beginPath();
+      c.roundRect(xOf(ss[0]) - r, y - r * 0.72, xOf(ss[ss.length - 1]) - xOf(ss[0]) + r * 2, r * 1.44, r);
+      c.fill();
+    }
+  }
+
+  // basili noktalar
+  c.fillStyle = color;
+  for (let s = 0; s < 6; s++) {
+    const f = frets[s];
+    if (f === null || f === 0) continue;
+    if (barre && f === barre) continue;         // cubuk zaten cizdi
+    c.beginPath(); c.arc(xOf(s), yMid(f), r, 0, 7); c.fill();
+  }
+}
+
 window.Fretboard = { TUNING, STRING_NAMES, MAX_FRET, assignFingerings,
-                     activeAt, fretWindow, drawFretboard };
+                     activeAt, fretWindow, drawFretboard, drawChordDiagram };

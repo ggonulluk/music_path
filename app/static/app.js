@@ -723,7 +723,8 @@ async function loadAnalysis(song) {
    Muzik teorisi scales.js'te, cizim fretboard.js'te; burada sadece arayuz.
    ==================================================================== */
 
-const SC = { root: 4, id: 'pentmin', box: null, boxes: null };   // varsayilan E minör pent.
+const SC = { root: 4, id: 'pentmin', box: null, boxes: null,
+             chord: null, chords: null };   // varsayilan E minör pentatonik
 
 function showView(name) {
   for (const v of ['library', 'player', 'scales']) {
@@ -738,7 +739,7 @@ function buildScaleUI() {
       const b = document.createElement('button');
       b.className = 'sc-root';
       b.textContent = n;
-      b.onclick = () => { SC.root = i; SC.box = null; renderScales(); };
+      b.onclick = () => { SC.root = i; SC.box = null; SC.chord = null; renderScales(); };
       rr.appendChild(b);
     });
   }
@@ -757,7 +758,7 @@ function buildScaleUI() {
       o.textContent = s.name;
       sel.lastElementChild.appendChild(o);
     }
-    sel.onchange = () => { SC.id = sel.value; SC.box = null; renderScales(); };
+    sel.onchange = () => { SC.id = sel.value; SC.box = null; SC.chord = null; renderScales(); };
   }
 }
 
@@ -801,8 +802,18 @@ function renderScales() {
   const dc = Scales.diatonicChords(SC.root, sc);
   if (dc) {
     $('#sc-chordwrap').classList.remove('hidden');
-    $('#sc-chords').innerHTML = dc.chords.map((c) =>
-      `<div class="sc-chord ${c.quality}"><b>${c.name}</b><span>${c.roman}</span></div>`).join('');
+    $('#sc-chords').innerHTML = dc.chords.map((c, i) =>
+      `<div class="sc-chord ${c.quality}" data-c="${i}"><b>${c.name}</b><span>${c.roman}</span></div>`)
+      .join('');
+    SC.chords = dc.chords;
+    $('#sc-chords').onclick = (e) => {
+      const t = e.target.closest('.sc-chord');
+      if (!t) return;
+      const i = Number(t.dataset.c);
+      SC.chord = SC.chord === i ? null : i;     // tekrar tiklayinca kapat
+      renderVoicings();
+    };
+    renderVoicings();
     $('#sc-chordnote').textContent = dc.from
       ? `${rootName} ${dc.from} gamının akorları — pentatonikle solo yaparken altta bunlar çalar.`
       : 'Gamın her derecesi üstüne kurulan üçlüler.';
@@ -811,6 +822,33 @@ function renderScales() {
   }
 
   drawScaleBoard();
+}
+
+/* Secili akorun basilis sekilleri: klavye boyunca alternatif pozisyonlar. */
+function renderVoicings() {
+  const box = $('#sc-voicings');
+  document.querySelectorAll('.sc-chord')
+    .forEach((el, i) => el.classList.toggle('on', i === SC.chord));
+
+  if (SC.chord === null || !SC.chords) { box.classList.add('hidden'); return; }
+  const ch = SC.chords[SC.chord];
+  const ivs = { major: [0, 4, 7], minor: [0, 3, 7], dim: [0, 3, 6], aug: [0, 4, 8] }[ch.quality];
+  if (!ivs) { box.classList.add('hidden'); return; }
+
+  const root = Scales.PC.indexOf(ch.name.match(/^[A-G]#?/)[0]);
+  const vs = Scales.chordVoicings(root, ivs, 5);
+  box.classList.remove('hidden');
+  box.innerHTML =
+    `<div class="vc-head"><b>${ch.name}</b>` +
+    `<span>${vs.length} basılış · ${ch.roman}. derece</span></div>` +
+    vs.map((v, i) => `
+      <div class="vc">
+        <canvas id="vc-${i}"></canvas>
+        <div class="vc-txt">${Scales.voicingText(v.frets)}</div>
+        <div class="vc-sub">${v.position === 0 ? 'açık' : v.position + '. perde'} · ${v.fingers} parmak${v.barre ? ' · barre' : ''}</div>
+      </div>`).join('');
+
+  vs.forEach((v, i) => Fretboard.drawChordDiagram($(`#vc-${i}`), v.frets, { barre: v.barre }));
 }
 
 function drawScaleBoard() {

@@ -149,7 +149,183 @@ function fretMarks(root, steps, maxFret = 15) {
   return marks;
 }
 
+/* ====================================================================
+   AKOR BASILIŞLARI (voicing)
+
+   Bir akoru gitarda calmanin onlarca yolu var. Isin zorlugu hangilerinin
+   GERCEKTEN BASILABILIR ve gitaristin taniyacagi sekiller oldugunu
+   bulmak. Uc kisit birlikte calisiyor:
+
+     1. Akorun butun sesleri bulunmali (kok, ucl u, besli)
+     2. El acikligi 4 perdeyi gecmemeli
+     3. Parmak sayisi 4'u gecmemeli - gecerse barre gerekir, barre de
+        ancak bos tel yoksa ve en dusuk perdede birden fazla tel varsa
+        mumkun
+
+   Puanlama gercek gitar tercihlerini taklit ediyor: kok notanin basta
+   olmasi, cok telin duymasi, bos tel kullanmak ve dusuk pozisyon iyi;
+   ic susturma (ortadaki telin susturulmasi), cok parmak ve barre kotu.
+   ==================================================================== */
+
+const TUN6 = [40, 45, 50, 55, 59, 64];
+
+/* Barre gerekiyor mu?
+
+   Ayni perdeye basilmis iki telin ARASINDA daha yuksek perdeye basilmis
+   bir tel varsa, o iki teli ayri parmaklarla tutmak mumkun degil -
+   parmaklar birbirinin uzerinden gecmek zorunda kalir. Tek cozum isaret
+   parmagini boydan boya yatirmak, yani barre. */
+function barreFret(v) {
+  const byFret = new Map();
+  v.forEach((f, s) => {
+    if (f === null || f === 0) return;
+    if (!byFret.has(f)) byFret.set(f, []);
+    byFret.get(f).push(s);
+  });
+  for (const [f, ss] of byFret) {
+    for (let i = 0; i < ss.length - 1; i++) {
+      for (let s = ss[i] + 1; s < ss[i + 1]; s++) {
+        if (v[s] !== null && v[s] > f) return f;
+      }
+    }
+  }
+  return 0;
+}
+
+/* Parmak maliyeti. null = calinamaz. */
+function fingerCost(v) {
+  const fretted = v.filter((f) => f !== null && f > 0);
+  if (!fretted.length) return { fingers: 0, barre: 0 };
+  const minF = Math.min(...fretted);
+  const bf = barreFret(v);
+
+  if (bf) {
+    // Barre ancak sekildeki EN DUSUK perdede kurulabilir - daha yukarida
+    // kurulsa altindaki notalari susturur
+    if (bf !== minF) return null;
+    // Barre araliginda bos tel olamaz; isaret parmagi onu da bastirir
+    const ss = [];
+    v.forEach((f, s) => { if (f === bf) ss.push(s); });
+    for (let s = ss[0]; s <= ss[ss.length - 1]; s++) {
+      if (v[s] === 0) return null;
+    }
+    const above = fretted.filter((f) => f > bf).length;
+    return 1 + above <= 4 ? { fingers: 1 + above, barre: bf } : null;
+  }
+
+  return fretted.length <= 4 ? { fingers: fretted.length, barre: 0 } : null;
+}
+
+function scoreVoicing(v, root, intervals) {
+  const idx = [];
+  for (let s = 0; s < 6; s++) if (v[s] !== null) idx.push(s);
+  if (idx.length < 3) return null;
+
+  const pcs = new Set(idx.map((s) => (TUN6[s] + v[s]) % 12));
+  for (const i of intervals) if (!pcs.has((root + i) % 12)) return null;  // eksik ses
+
+  const fc = fingerCost(v);
+  if (!fc) return null;
+
+  const fretted = idx.map((s) => v[s]).filter((f) => f > 0);
+  if (fretted.length > 1 && Math.max(...fretted) - Math.min(...fretted) > 4) return null;
+
+  // Ortadaki tellerin susturulmasi zor ve kulakta bosluk birakir
+  const interiorMutes = (idx[idx.length - 1] - idx[0] + 1) - idx.length;
+
+  const opens = idx.filter((s) => v[s] === 0).length;
+  const minF = fretted.length ? Math.min(...fretted) : 0;
+  const span = fretted.length > 1 ? Math.max(...fretted) - minF : 0;
+
+  // Dolgunluk: 6 tel 5'ten belirgin iyi degil, ama 3 tel zayif
+  let sc = [0, 0, 0, 0, 1.2, 2.4, 3.6][idx.length] ?? 0;
+  if ((TUN6[idx[0]] + v[idx[0]]) % 12 === root % 12) sc += 3;   // kok basta
+  sc -= interiorMutes * 3.5;                    // ortadaki teli susturmak zor, kulakta bosluk
+  sc -= fc.fingers * 1.0;                       // az parmak cok deger
+  sc -= span * 0.5;                             // gerilme: 502220 ile x02220 farki burada
+  if (fc.barre) sc -= 0.2;                      // barre standart, agir cezalandirilmamali
+  sc += opens * 0.5;
+
+  // Bos telle yuksek perdeyi birlestirmek deyimsel degil: "875050" teknik
+  // olarak basilabilir ama kimse C'yi boyle calmaz.
+  if (opens && minF > 3) sc -= 6;
+
+  return { score: sc, ...fc, strings: idx.length, span };
+}
+
+/* Bir akorun basilis sekilleri, iyiden kotuye. */
+function chordVoicings(root, intervals, limit = 5) {
+  const tones = new Set(intervals.map((i) => (root + i) % 12));
+  const seen = new Set();
+  const all = [];
+
+  for (let p = 0; p <= 12; p++) {
+    const cand = [];
+    for (let s = 0; s < 6; s++) {
+      const c = [null];
+      if (tones.has(TUN6[s] % 12)) c.push(0);                  // bos tel
+      for (let f = Math.max(p, 1); f <= p + 3; f++) {
+        if (tones.has((TUN6[s] + f) % 12)) c.push(f);
+      }
+      cand.push(c);
+    }
+    const v = new Array(6);
+    (function rec(s) {
+      if (s === 6) {
+        const r = scoreVoicing(v, root, intervals);
+        if (!r) return;
+        const key = v.join(',');
+        if (seen.has(key)) return;
+        seen.add(key);
+        all.push({ frets: v.slice(), ...r });
+        return;
+      }
+      for (const f of cand[s]) { v[s] = f; rec(s + 1); }
+    })(0);
+  }
+
+  /* Once HER POZISYONUN kendi en iyisini sec, sonra pozisyonlari
+     sirayla goster.
+
+     "Genel olarak en iyi sekil" siralamasi kirilgandi: bir pozisyondaki
+     kanonik sekil, baska pozisyondaki dolgun bir barre'a puan farkiyla
+     yeniliyor ve listeden dusuyordu. Oysa amac zaten alternatif
+     POZISYONLAR gostermek - her pozisyonda o pozisyonun dogru seklini
+     secmek cok daha saglam bir karar. */
+  const best = new Map();
+  for (const v of all) {
+    const fr = v.frets.filter((f) => f !== null && f > 0);
+    const pos = fr.length ? Math.min(...fr) : 0;
+    const cur = best.get(pos);
+    if (!cur || v.score > cur.score) best.set(pos, { ...v, position: pos });
+  }
+
+  /* Perde boyunca yay, ama ONCE PUANA gore sec.
+
+     En dusuk pozisyondan baslayip yaymak yanlisti: 0. pozisyondaki zayif
+     bir yarim akor (orn. "xx000x") 2. perdedeki kanonik G'yi engelliyordu.
+     Iyi olani once alip cevresini kapatmak dogru sonucu veriyor. */
+  const taken = [];
+  for (const v of [...best.values()].sort((a, b) => b.score - a.score)) {
+    // Puan tabani: bir pozisyonda sadece kotu bir sekil varsa hic
+    // gostermemek, "0-15-x-0-x-x" gibi kimsenin calmayacagi bir seyi
+    // alternatif diye sunmaktan iyi
+    if (v.score < -2) continue;
+    if (taken.some((t) => Math.abs(t.position - v.position) < 3)) continue;
+    taken.push(v);
+    if (taken.length >= limit) break;
+  }
+  return taken.sort((a, b) => a.position - b.position);
+}
+
+/* Basilis sekli -> "x32010" gosterimi (10+ perdeler tire ile ayrilir). */
+function voicingText(frets) {
+  const s = frets.map((f) => (f === null ? 'x' : String(f)));
+  return s.some((x) => x.length > 1) ? s.join('-') : s.join('');
+}
+
 window.Scales = {
+  chordVoicings, voicingText,
   SCALES, SCALE_NOTE, PC: SC_PC, byId,
   noteNames, degrees, diatonicChords, pentatonicBoxes, fretMarks,
 };
