@@ -1,4 +1,4 @@
-"""Stem Player baslatici.
+"""GgMix baslatici.
 
 Paketlenmis surumun giris noktasi. Gelistirmede de calisir:
     .venv\\Scripts\\python.exe launcher.py
@@ -78,7 +78,7 @@ def main() -> None:
     url = f"http://{HOST}:{port}"
 
     print()
-    print("  Stem Player")
+    print("  GgMix")
     print(f"  veri klasoru : {data_dir()}")
     print(f"  modeller     : {'gomulu (cevrimdisi)' if cache else 'HuggingFace onbellegi'}")
     print(f"  adres        : {url}")

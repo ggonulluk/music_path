@@ -107,20 +107,118 @@ const jobStates = {};        // is anahtari -> son gorulen durum
    saniye eder ve 1.5 saniyede bir yoklamak CPU'yu surekli mesgul birakir.
    /api/jobs tamamen bellekte, ~3 ms, kutuphane boyutundan bagimsiz.
    Kutuphane listesi ise yalnizca bir is bittiginde tazelenir. */
+/* Kutuphane bellekte tutuluyor; arama/siralama istemcide yapiliyor.
+   Her tus vurusunda sunucuya gitmek yuzlerce sarkida gereksiz - liste
+   zaten elimizde. */
+const LIB = { songs: [], search: '', state: '', sort: 'name' };
+
+const fmtSize = (b) => (!b ? '—'
+  : b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : Math.round(b / 1e6) + ' MB');
+
 async function loadLibrary() {
-  const songs = await fetch('/api/songs').then((r) => r.json());
-  const list = $('#song-list');
-  list.innerHTML = '';
-  $('#library-empty').classList.toggle('hidden', songs.length > 0);
+  LIB.songs = await fetch('/api/songs').then((r) => r.json());
+  renderLibrary();
 
-  let busy = false;
-  for (const s of songs) {
-    if (s.state === 'running' || s.state === 'queued') busy = true;
-    list.appendChild(songRow(s));
-  }
-
+  const busy = LIB.songs.some((s) => s.state === 'running' || s.state === 'queued');
   clearTimeout(pollTimer);
   if (busy) pollTimer = setTimeout(pollJobs, 1500);
+}
+
+function visibleSongs() {
+  const q = LIB.search.trim().toLocaleLowerCase('tr');
+  let out = LIB.songs.filter((s) => {
+    if (LIB.state === 'busy') {
+      if (s.state !== 'running' && s.state !== 'queued') return false;
+    } else if (LIB.state && s.state !== LIB.state) return false;
+    if (!q) return true;
+    return [s.title, s.artist, s.file].filter(Boolean)
+      .some((v) => v.toLocaleLowerCase('tr').includes(q));
+  });
+  const by = {
+    name: (a, b) => (a.title || a.file).localeCompare(b.title || b.file, 'tr'),
+    added: (a, b) => (b.mtime || 0) - (a.mtime || 0),
+    duration: (a, b) => (b.duration || 0) - (a.duration || 0),
+    size: (a, b) => (b.stem_bytes + b.src_bytes) - (a.stem_bytes + a.src_bytes),
+  }[LIB.sort];
+  return out.sort(by);
+}
+
+function renderLibrary() {
+  const list = $('#song-list');
+  list.innerHTML = '';
+  const vis = visibleSongs();
+  $('#library-empty').classList.toggle('hidden', LIB.songs.length > 0);
+  $('#library-nomatch').classList.toggle(
+    'hidden', LIB.songs.length === 0 || vis.length > 0);
+  for (const s of vis) list.appendChild(songRow(s));
+
+  const bytes = LIB.songs.reduce((a, s) => a + s.stem_bytes + s.src_bytes, 0);
+  const n = LIB.songs.length;
+  $('#lib-stats').textContent =
+    `${vis.length < n ? vis.length + ' / ' : ''}${n} şarkı · ${fmtSize(bytes)}`;
+}
+
+/* Silme geri alinamaz; tek tikla olmamali. Promise<bool> donduruyor. */
+function confirmDialog(title, bodyHTML, okText = 'Sil') {
+  return new Promise((resolve) => {
+    const box = $('#confirm');
+    $('#confirm-title').textContent = title;
+    $('#confirm-body').innerHTML = bodyHTML;
+    $('#confirm-yes').textContent = okText;
+    box.classList.remove('hidden');
+    const done = (v) => {
+      box.classList.add('hidden');
+      $('#confirm-yes').onclick = $('#confirm-no').onclick = null;
+      document.removeEventListener('keydown', esc);
+      resolve(v);
+    };
+    const esc = (e) => { if (e.key === 'Escape') done(false); };
+    $('#confirm-yes').onclick = () => done(true);
+    $('#confirm-no').onclick = () => done(false);
+    document.addEventListener('keydown', esc);
+  });
+}
+
+function closeMenus() {
+  document.querySelectorAll('.menu').forEach((m) => m.remove());
+}
+
+async function deleteSong(s, scope) {
+  const name = s.title || s.file;
+  const size = fmtSize(scope === 'all' ? s.stem_bytes + s.src_bytes : s.stem_bytes);
+  const ok = await confirmDialog(
+    scope === 'all' ? 'Şarkıyı tamamen sil' : 'Kanalları sil',
+    scope === 'all'
+      ? `<b>${name}</b> — kaynak dosya ve ayrılmış kanallar birlikte silinecek
+         (${size}). Bu şarkı kütüphaneden kalkar.`
+      : `<b>${name}</b> — ayrılmış kanallar, analiz ve notalar silinecek
+         (${size}). Kaynak dosya kalır, istersen tekrar ayırabilirsin.`);
+  if (!ok) return;
+  const r = await fetch(`/api/songs/${s.id}?scope=${scope}`, { method: 'DELETE' });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    await confirmDialog('Silinemedi', e.detail || 'Bilinmeyen hata', 'Tamam');
+    return;
+  }
+  loadLibrary();
+}
+
+async function scanOrphans() {
+  const info = $('#orphan-info');
+  info.textContent = 'taranıyor…';
+  const d = await fetch('/api/library/orphans').then((r) => r.json());
+  if (!d.items.length) { info.textContent = 'Öksüz kanal klasörü yok.'; return; }
+  info.textContent = `${d.items.length} öksüz klasör · ${fmtSize(d.total_bytes)}`;
+  const ok = await confirmDialog(
+    'Öksüz kanalları sil',
+    `Kaynak şarkısı artık bulunmayan <b>${d.items.length}</b> kanal klasörü var,
+     toplam <b>${fmtSize(d.total_bytes)}</b>:<br><br>` +
+    d.items.slice(0, 12).map((i) => `• ${i.name} <span style="color:var(--dimmer)">(${fmtSize(i.bytes)})</span>`).join('<br>') +
+    (d.items.length > 12 ? `<br>• …ve ${d.items.length - 12} tane daha` : ''));
+  if (!ok) return;
+  const r = await fetch('/api/library/orphans', { method: 'DELETE' }).then((x) => x.json());
+  info.textContent = `${r.removed.length} klasör silindi · ${fmtSize(r.freed_bytes)} boşaldı`;
+  loadLibrary();
 }
 
 async function pollJobs() {
@@ -173,6 +271,7 @@ function songRow(s) {
   if (s.artist) meta.push(s.artist);
   if (s.duration) meta.push(fmt(s.duration));
   if (s.state === 'ready') meta.push(s.stems.length + ' kanal');
+  if (s.stem_bytes) meta.push(fmtSize(s.stem_bytes + s.src_bytes));
 
   const job = s.job || {};
   const pct = Math.round((job.progress || 0) * 100);
@@ -210,6 +309,41 @@ function songRow(s) {
     };
     act.appendChild(b);
   }
+
+  // Silme ve klasor islemleri satir menusunde: ana eylemin yaninda
+  // dogrudan bir "Sil" dugmesi kazara tiklanmaya cok acik olurdu
+  const wrap = document.createElement('div');
+  wrap.className = 'row-menu';
+  const dots = document.createElement('button');
+  dots.className = 'dots';
+  dots.textContent = '⋯';
+  dots.title = 'Daha fazla';
+  dots.onclick = (e) => {
+    e.stopPropagation();
+    const open = wrap.querySelector('.menu');
+    closeMenus();
+    if (open) return;
+    const m = document.createElement('div');
+    m.className = 'menu';
+    const hasStems = s.stems.length > 0;
+    m.innerHTML = `
+      ${hasStems ? '<button data-a="reanalyze">Analizi yenile</button>' : ''}
+      ${hasStems ? '<div class="sep"></div>' : ''}
+      ${hasStems ? '<button class="warn" data-a="stems">Kanalları sil (mp3 kalsın)</button>' : ''}
+      <button class="warn" data-a="all">Şarkıyı tamamen sil</button>`;
+    m.onclick = async (ev) => {
+      const a = ev.target.dataset.a;
+      if (!a) return;
+      closeMenus();
+      if (a === 'reanalyze') {
+        await fetch(`/api/songs/${s.id}/analyze`, { method: 'POST' });
+        loadLibrary();
+      } else deleteSong(s, a);
+    };
+    wrap.appendChild(m);
+  };
+  wrap.appendChild(dots);
+  act.appendChild(wrap);
   return el;
 }
 
@@ -975,6 +1109,13 @@ function initControls() {
     $('#library').classList.remove('hidden');
     loadLibrary();
   };
+
+  // Kutuphane suzme/siralama - hepsi istemcide, sunucuya gitmiyor
+  $('#lib-search').oninput = (e) => { LIB.search = e.target.value; renderLibrary(); };
+  $('#lib-state').onchange = (e) => { LIB.state = e.target.value; renderLibrary(); };
+  $('#lib-sort').onchange = (e) => { LIB.sort = e.target.value; renderLibrary(); };
+  $('#btn-orphans').onclick = scanOrphans;
+  document.addEventListener('click', closeMenus);
 
   $('#file-input').onchange = async (e) => {
     const f = e.target.files[0];

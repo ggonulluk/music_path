@@ -1,4 +1,4 @@
-# Stem Player
+# GgMix
 
 Şarkıları enstrüman kanallarına ayırıp her kanalı ayrı kısıp açabildiğin yerel bir
 çalışma aracı. Amaç: bir parçanın gitarını (ya da başka bir enstrümanını) izole edip
@@ -111,6 +111,56 @@ Tel/perde tahmini kabadır — en düşük perdeyi seçer, gerçek parmak pozisy
 
 ---
 
+## Kütüphane yönetimi
+
+Kitaplık başlığında **arama** (yazdıkça süzer), **durum filtresi** (tümü / hazır /
+ayrılmamış / işlemde), **sıralama** (ad, eklenme, süre, boyut) ve sağda toplam
+sayaç var: `12 / 40 şarkı · 3.2 GB`. Süzme tamamen tarayıcıda yapılır; liste
+zaten bellekte olduğu için her tuş vuruşunda sunucuya gidilmez.
+
+Her satırın sonundaki **⋯** menüsünde:
+
+| | Ne yapar |
+|---|---|
+| Analizi yenile | Ton/gam/akor analizini yeniden hesaplar |
+| Kanalları sil | `stems\` klasörünü siler, kaynak mp3 kalır — tekrar ayırabilirsin |
+| Şarkıyı tamamen sil | Kaynak dosya + kanallar |
+
+**Silinen hiçbir şey kalıcı olarak yok edilmez** — hepsi geri dönüşüm kutusuna
+gider. Her silme öncesi ne kadar yer boşalacağını gösteren bir onay çıkar.
+Üzerinde iş çalışan bir şarkı silinemez (işçi yarıda kalmasın diye).
+
+Altta **Öksüz kanalları tara** var: `songs\`'ta karşılığı kalmamış `stems\`
+klasörlerini bulur. Önce ne bulunduğunu ve kaç MB olduğunu gösterir, sonra
+onay ister.
+
+### Ölçek
+
+Stem maliyeti şarkı dakikası başına **8.64 MB** (6 kanal × 192 kbps):
+
+| Kütüphane | Kanalların kapladığı yer |
+|---|---|
+| 50 şarkı | 1.7 GB |
+| 100 şarkı | 3.5 GB |
+| 300 şarkı | 10.4 GB |
+
+### Bilinen sınır
+
+Şarkı kimliği **dosya adından** türetiliyor ve kanal klasörü de öyle
+adlandırılıyor. Yani bir şarkıyı yeniden adlandırırsan kanalları öksüz kalır
+(tarama aracı bunları bulur). Ayrıca `parça.mp3` ile `parça.wav` aynı kanal
+klasörünü paylaşır. Yüzlerce şarkıya çıkarsa kimliği dosya içeriğinden
+türetmek gerekir.
+
+### Türkçe etiketler
+
+ID3v1 etiketleri kodlama bilgisi taşımaz ve `mutagen` latin-1 varsayar; Türkçe
+etiketler genelde Windows-1254 ile yazıldığı için `BİR` → `BÝR` gibi bozulur.
+Başlıkta latin-1'e özgü Izlandaca harfler (`ÐÝÞðýþ`) varsa yanlış çözülmüş
+sayılıp cp1254 ile yeniden çözülür.
+
+---
+
 ## Kanal kalitesi hakkında
 
 Ayrım mükemmel değil, model tabanlı bir tahmin:
@@ -218,8 +268,8 @@ akor yokken gizlenmez, boşalır.
 .venv\Scripts\python.exe build.py
 ```
 
-Çıktı: `dist\StemPlayer\` klasörü (~864 MB) ve `dist\StemPlayer-portable.zip`
-(~392 MB). ZIP'i hedef bilgisayarda aç, `StemPlayer.exe`'ye çift tıkla.
+Çıktı: `dist\GgMix\` klasörü (~864 MB) ve `dist\GgMix-portable.zip`
+(~392 MB). ZIP'i hedef bilgisayarda aç, `GgMix.exe`'ye çift tıkla.
 Python, yönetici hakkı ve internet gerekmez.
 
 Paketle ilgili kararlar:

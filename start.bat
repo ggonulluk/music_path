@@ -1,8 +1,8 @@
 @echo off
 cd /d "%~dp0"
-title Stem Player
+title GgMix
 echo.
-echo   Stem Player baslatiliyor...
+echo   GgMix baslatiliyor...
 echo   Tarayici birazdan acilacak:  http://127.0.0.1:8000
 echo   Kapatmak icin bu pencerede Ctrl+C.
 echo.

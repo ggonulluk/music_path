@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Stem Player</title>
+<title>GgMix</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <header>
-  <h1><span class="dot"></span> Stem Player</h1>
+  <h1><span class="dot"></span> GgMix</h1>
   <div class="head-right">
     <button id="btn-library" class="ghost">Kitaplık</button>
     <label class="ghost upload">
@@ -21,12 +21,50 @@
 
 <!-- ------------------------------------------------------------ KİTAPLIK -->
 <section id="library">
+  <div class="lib-bar">
+    <input id="lib-search" class="lib-input" type="search" placeholder="Şarkı ara…"
+           autocomplete="off" spellcheck="false">
+    <select id="lib-state" class="lib-select">
+      <option value="">Tümü</option>
+      <option value="ready">Hazır</option>
+      <option value="raw">Ayrılmamış</option>
+      <option value="busy">İşlemde</option>
+    </select>
+    <select id="lib-sort" class="lib-select">
+      <option value="name">Ada göre</option>
+      <option value="added">Eklenme</option>
+      <option value="duration">Süre</option>
+      <option value="size">Boyut</option>
+    </select>
+    <span id="lib-stats" class="lib-stats"></span>
+  </div>
+
   <div id="song-list"></div>
+
   <p id="library-empty" class="empty hidden">
     <code>songs\</code> klasörü boş. Yukarıdan şarkı ekle ya da mp3'lerini
     doğrudan o klasöre kopyala.
   </p>
+  <p id="library-nomatch" class="empty hidden">Aramaya uyan şarkı yok.</p>
+
+  <div class="lib-maint">
+    <button id="btn-orphans" class="btn sec">Öksüz kanalları tara</button>
+    <span id="orphan-info" class="orphan-info"></span>
+  </div>
 </section>
+
+<!-- Silme onayi. Silme geri alinamaz bir is; tek tikla olmamali. -->
+<div id="confirm" class="overlay hidden">
+  <div class="box confirm-box">
+    <div id="confirm-title" class="confirm-title"></div>
+    <div id="confirm-body" class="confirm-body"></div>
+    <div class="confirm-act">
+      <button id="confirm-no" class="btn sec">Vazgeç</button>
+      <button id="confirm-yes" class="btn danger">Sil</button>
+    </div>
+    <div class="confirm-note">Silinenler geri dönüşüm kutusuna gider, kalıcı değil.</div>
+  </div>
+</div>
 
 <!-- ------------------------------------------------------------- OYNATICI -->
 <section id="player" class="hidden">

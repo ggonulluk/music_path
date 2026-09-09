@@ -1,4 +1,4 @@
-# Stem Player — Optimizasyon, Kaynak Kullanımı ve Kütüphane Yönetimi
+# GgMix — Optimizasyon, Kaynak Kullanımı ve Kütüphane Yönetimi
 
 **Tarih:** 2026-09-08 · **Kapsam:** `app/` (FastAPI + statik ön yüz), `.venv` / `.venv-transcribe`
 **Durum:** Salt okunur denetim. Bu raporu hazırlarken **hiçbir kod değiştirilmedi.**

@@ -3,8 +3,8 @@
     .venv\\Scripts\\python.exe build.py
 
 Ciktilar:
-    dist/StemPlayer/            calisir klasor (StemPlayer.exe icinde)
-    dist/StemPlayer-portable.zip
+    dist/GgMix/            calisir klasor (GgMix.exe icinde)
+    dist/GgMix-portable.zip
 
 Tasarim kararlari:
 
@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parent
 BUILD = ROOT / "build"
 DIST = ROOT / "dist"
 STAGE = BUILD / "stage"
-NAME = "StemPlayer"
+NAME = "GgMix"
 
 MODEL_REPOS = ["models--adefossez--HTDemucs", "models--adefossez--HTDemucs-6s"]
 
@@ -103,10 +103,10 @@ def run_pyinstaller(models: Path) -> None:
 
 def write_readme(out: Path) -> None:
     (out / "OKUBENI.txt").write_text(
-        "Stem Player - tasinabilir surum\n"
+        "GgMix - tasinabilir surum\n"
         "=" * 40 + "\n\n"
         "CALISTIRMA\n"
-        "  StemPlayer.exe dosyasina cift tikla.\n"
+        "  GgMix.exe dosyasina cift tikla.\n"
         "  Tarayici kendiliginden acilir. Kapatmak icin konsol\n"
         "  penceresinde Ctrl+C.\n\n"
         "MUZIK EKLEME\n"

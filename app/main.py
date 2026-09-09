@@ -1,4 +1,4 @@
-"""Yerel stem player sunucusu.
+"""GgMix sunucusu - sarkilari enstruman kanallarina ayiran yerel arac.
 
 Tamamen lokal calisir (127.0.0.1). Disariya hicbir istek gitmez,
 muzik dosyalari hicbir yere yuklenmez.
@@ -13,13 +13,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from mutagen import File as MutagenFile
 
-from . import analysis, paths, transcribe
+from . import analysis, library, paths, transcribe
 from .separator import QUEUE, SONGS, STEMS, STEM_ORDER
 
 AUDIO_EXT = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus", ".aac", ".wma"}
 STATIC = paths.bundle_dir() / "app" / "static"
 
-app = FastAPI(title="Stem Player")
+app = FastAPI(title="GgMix")
 
 
 # --------------------------------------------------------------------- model
@@ -43,6 +43,23 @@ def scan() -> dict[str, Path]:
 _meta_cache: dict[str, tuple] = {}
 
 
+# ID3v1 etiketleri kodlama bilgisi tasimaz; mutagen latin-1 varsayiyor.
+# Turkce etiketler genelde Windows-1254 ile yazildigi icin "BİR" -> "BÝR"
+# gibi bozuluyor. Asagidaki harfler latin-1'de Izlandaca'ya ait ve Turkce
+# bir baslikta gercekten gecme ihtimali yok; varlarsa yanlis cozulmus
+# demektir ve cp1254 ile yeniden cozuyoruz.
+_CP1254_HINTS = set("ÐÝÞðýþ")
+
+
+def _fix_encoding(s: str | None) -> str | None:
+    if not s or not (_CP1254_HINTS & set(s)):
+        return s
+    try:
+        return s.encode("latin-1").decode("cp1254")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return s
+
+
 def metadata(path: Path) -> dict:
     key = str(path)
     try:
@@ -61,12 +78,14 @@ def metadata(path: Path) -> dict:
         if tags is not None:
             if tags.info is not None:
                 duration = round(float(tags.info.length), 2)
-            title = (tags.get("title") or [title])[0]
-            artist = (tags.get("artist") or [None])[0]
+            title = _fix_encoding((tags.get("title") or [title])[0])
+            artist = _fix_encoding((tags.get("artist") or [None])[0])
     except Exception:
         pass
 
-    out = {"title": title, "artist": artist, "duration": duration}
+    out = {"title": title, "artist": artist, "duration": duration,
+           "src_bytes": stamp[1] if stamp else 0,
+           "mtime": stamp[0] / 1e9 if stamp else 0}
     if stamp:
         _meta_cache[key] = (stamp, out)
     return out
@@ -78,7 +97,11 @@ def describe(sid: str, path: Path, can_tr: bool | None = None) -> dict:
     if can_tr is None:
         can_tr = transcribe.available()
     out = STEMS / path.stem
-    available = [s for s in STEM_ORDER if (out / f"{s}.mp3").exists()]
+    # Kanal/analiz/nota varligi ve klasor boyutu TEK dizin okumasiyla.
+    # Onceden 14 ayri exists() cagrisiydi; scandir hem daha ucuz hem de
+    # disk gostergesi icin gereken boyutu ek maliyetsiz veriyor.
+    names, stem_bytes = library.scan_stem_dir(out)
+    available = [s for s in STEM_ORDER if f"{s}.mp3" in names]
     job = QUEUE.get(sid, "separate")
 
     if len(available) == len(STEM_ORDER):
@@ -95,10 +118,11 @@ def describe(sid: str, path: Path, can_tr: bool | None = None) -> dict:
         "file": path.name,
         "state": state,
         "stems": available,
-        "analysis": analysis.cache_path(out).exists(),
+        "analysis": analysis.cache_path(out).name in names,
         "notes": [s for s in transcribe.TRANSCRIBABLE
-                  if transcribe.json_path(out, s).exists()],
+                  if transcribe.json_path(out, s).name in names],
         "can_transcribe": can_tr,
+        "stem_bytes": stem_bytes,
         **metadata(path),
     }
     if job:
@@ -210,6 +234,62 @@ def get_midi(sid: str, stem: str):
         raise HTTPException(404, "MIDI henuz uretilmedi")
     return FileResponse(path, media_type="audio/midi",
                         filename=f"{lib[sid].stem} - {stem}.mid")
+
+
+@app.delete("/api/songs/{sid}")
+def delete_song(sid: str, scope: str = "stems"):
+    """Kanallari ya da sarkinin tamamini geri donusum kutusuna gonder.
+
+    scope=stems  kanallar silinir, kaynak mp3 kalir (yeniden ayirilabilir)
+    scope=all    kaynak dosya da silinir
+    """
+    if scope not in ("stems", "all"):
+        raise HTTPException(400, "scope 'stems' veya 'all' olmali")
+    lib = scan()
+    if sid not in lib:
+        raise HTTPException(404, "sarki bulunamadi")
+
+    # Calisan/sirada bekleyen is varken silmek isciyi yarida birakir
+    for kind in ("separate", "analyze"):
+        j = QUEUE.get(sid, kind)
+        if j and j.state in ("queued", "running"):
+            raise HTTPException(409, "bu sarki uzerinde is calisiyor, once bitmeli")
+
+    src = lib[sid]
+    removed, freed = [], 0
+    folder = STEMS / src.stem
+    if folder.is_dir():
+        freed += library.dir_size(folder)
+        if library.trash(folder):
+            removed.append(f"stems/{src.stem}")
+    if scope == "all":
+        try:
+            freed += src.stat().st_size
+        except OSError:
+            pass
+        if library.trash(src):
+            removed.append(f"songs/{src.name}")
+        _meta_cache.pop(str(src), None)
+
+    return {"removed": removed, "freed_bytes": freed, "scope": scope}
+
+
+@app.get("/api/library/orphans")
+def list_orphans():
+    """songs/'ta karsiligi kalmamis kanal klasorleri (kuru calistirma)."""
+    items = library.find_orphans(SONGS, STEMS)
+    return {"items": items, "total_bytes": sum(i["bytes"] for i in items)}
+
+
+@app.delete("/api/library/orphans")
+def delete_orphans():
+    items = library.find_orphans(SONGS, STEMS)
+    removed, freed = [], 0
+    for it in items:
+        if library.trash(STEMS / it["name"]):
+            removed.append(it["name"])
+            freed += it["bytes"]
+    return {"removed": removed, "freed_bytes": freed}
 
 
 @app.get("/api/jobs")
