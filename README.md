@@ -88,6 +88,42 @@ notaları birbirine karıştırıyor, oysa amaç notaları ayırt etmek.
 
 Şarkının gerçek gitar sesini duymak istiyorsan **Ses** düğmesini kullan.
 
+### Gitar klavyesi
+
+Nota panelinin üstünde, çaldıkça basılı pozisyonları yakan bir klavye var.
+Perde penceresi çalınan bölgeye kendiliğinden kayar (üstte `perde 2–9` yazar);
+her karede kaydırmak gözü yorduğu için sadece nota pencerenin dışına çıkınca
+yeniden konumlanır.
+
+**Asıl iş çizim değil, pozisyon seçimi.** Bir `E4` notası gitarda 6 farklı
+tel/perde kombinasyonunda çalınabilir. Her notayı tek başına değerlendirip
+"en düşük perde" seçmek geçerli ama gerçekçi olmayan sonuç verir — el sürekli
+klavyenin bir ucundan ötekine zıplar, ve öğrenme aracında bu yanlış alışkanlık
+kazandırır.
+
+Bunun yerine pozisyonlar **tüm dizi boyunca bir yol olarak** seçiliyor: her nota
+olayı için olası parmak pozisyonları düğüm, ardışık olaylar arasındaki el
+hareketi geçiş maliyeti; dinamik programlama toplamı en aza indiren yolu buluyor.
+
+Ölçülen sonuç:
+
+| | Naif | Yol seçimi |
+|---|---|---|
+| Ortalama el hareketi (Whitesnake) | 1.84 perde | **1.17 perde** |
+| 5+ perde sıçraması (Whitesnake) | 96 | **19** |
+| 5+ perde sıçraması (Bir Kaç Saat) | 45 | **2** |
+
+Doğrulama olarak dört klasik açık akor şekli birebir çıkıyor: E majör
+`E0 A2 D2 G1 B0 e0`, Am `A0 D2 G2 B1 e0`, G majör `E3 A2 D0 G0 B0 e3`,
+D majör `D0 G2 B3 e2`.
+
+1700 nota için hesap ~13 ms, tarayıcıda çalışıyor, önbelleğe gerek yok.
+
+**Bir incelik:** uzun süren bir nota hâlâ tınlarken yeni bir nota başlayabilir
+ve ikisi aynı tele düşebilir. Gitarda bu imkânsız değil — teli tekrar kullanmak
+önceki notayı susturur — ama klavyede iki nokta göstermek yanlış olur. Gösterimde
+o telde en son başlayan nota kalır.
+
 ### Akor rozeti
 
 Aynı anda duyulan notalardan akorun adı çıkarılır ve büyük puntoyla yazılır

@@ -719,7 +719,8 @@ async function loadAnalysis(song) {
    venv'de alt surec olarak kosuyor (TensorFlow ana ortami bozardi).
    ==================================================================== */
 
-const N = { stem: 'gitar', data: null, poll: null, song: null };
+const N = { stem: 'gitar', data: null, poll: null, song: null,
+            fing: null, win: [0, 7], winAt: 0 };
 
 function buildNoteStems(song) {
   const box = $('#note-stems');
@@ -746,6 +747,7 @@ async function loadNotes(song, stem) {
   N.song = song;
   N.stem = stem;
   N.data = null;
+  N.fing = null;
   $('#note-midi').classList.add('hidden');
   $('#note-info').textContent = '';
 
@@ -760,6 +762,12 @@ async function loadNotes(song, stem) {
   const res = await fetch(`/api/songs/${song.id}/notes/${stem}`);
   if (res.status === 200) {
     N.data = await res.json();
+    // Parmak pozisyonlarini tum dizi boyunca bir yol olarak sec. Sunucunun
+    // gonderdigi frets haritasi her notayi tek basina degerlendiriyor;
+    // bu ise ardisik notalari birlikte dusunup el hareketini en aza
+    // indiriyor. 1700 notada ~13 ms, onbelleklemeye gerek yok.
+    N.fing = Fretboard.assignFingerings(N.data.notes);
+    N.win = [0, 7]; N.winAt = 0;
     $('#note-empty').classList.add('hidden');
     $('#note-info').textContent =
       `${N.data.count} nota · ${N.data.low}–${N.data.high}`;
@@ -874,6 +882,28 @@ function drawRoll() {
     ? `döngüye yakınlaşıldı · ${vis.length} nota` : '';
 }
 
+/* Gitar klavyesi: o anda basili olan pozisyonlari yakar. */
+function drawFret(pos) {
+  const cv = $('#fret');
+  const hint = $('#fret-hint');
+  if (!N.data || !N.fing) {
+    Fretboard.drawFretboard(cv, { active: [], window: [0, 7] });
+    hint.textContent = N.data ? '' : 'notalar çıkarılmadı';
+    return;
+  }
+  const active = Fretboard.activeAt(N.data.notes, N.fing, pos);
+
+  // Perde penceresini her karede kaydirmak gozu yoruyor; sadece calinan
+  // nota pencerenin disina cikinca yeniden konumlandiriyoruz
+  const fretted = active.filter((a) => a.fret > 0).map((a) => a.fret);
+  if (fretted.length) {
+    const lo = Math.min(...fretted), hi = Math.max(...fretted);
+    if (lo < N.win[0] || hi > N.win[1]) N.win = Fretboard.fretWindow(active, 7);
+  }
+  Fretboard.drawFretboard(cv, { active, window: N.win });
+  hint.textContent = `perde ${N.win[0]}–${N.win[1]}`;
+}
+
 /* Oynatma kafasindaki notalar + bunlardan cikan akor adi. */
 function renderNoteNow(pos) {
   const box = $('#note-now');
@@ -883,7 +913,12 @@ function renderNoteNow(pos) {
   const blank = () => { badge.className = 'chord empty'; badge.innerHTML = ''; };
   if (!N.data) { box.innerHTML = ''; blank(); return; }
 
-  const live = N.data.notes.filter(([s, e]) => s <= pos && pos < e);
+  // Indisleri de tutuyoruz: parmak pozisyonu nota BASINA secildigi icin
+  // (ayni perde farkli anlarda farkli telde calinabilir) perdeye gore
+  // aranan bir harita yetmiyor
+  const liveIdx = [];
+  N.data.notes.forEach((n, i) => { if (n[0] <= pos && pos < n[1]) liveIdx.push(i); });
+  const live = liveIdx.map((i) => N.data.notes[i]);
   const anChord = analysisChordAt(pos);
 
   if (!live.length) {
@@ -913,8 +948,11 @@ function renderNoteNow(pos) {
     blank();
   }
 
-  box.innerHTML = live.slice(0, 6).map(([, , p]) => {
-    const f = N.data.frets[String(p)];
+  box.innerHTML = liveIdx.slice(0, 6).map((i) => {
+    const p = N.data.notes[i][2];
+    const fg = N.fing && N.fing[i];
+    const f = fg ? { string: Fretboard.STRING_NAMES[fg[0]], fret: fg[1] }
+                 : N.data.frets[String(p)];
     const pos2 = f ? `<small>${f.string}/${f.fret}</small>` : '';
     return `<span class="nn">${N.data.names[String(p)]}${pos2}</span>`;
   }).join('');
@@ -1002,6 +1040,7 @@ function checkCanvasSizes() {
   const rs = `${r.clientWidth}x${r.clientHeight}`;
   if (ws !== canvasSize.wave) { canvasSize.wave = ws; drawWave(); }
   if (rs !== canvasSize.roll) { canvasSize.roll = rs; drawRoll(); }
+  // Klavye her karede zaten yeniden ciziliyor, boyut takibi gerekmiyor
 }
 
 function render() {
@@ -1016,6 +1055,7 @@ function render() {
   const rf = Math.max(0, Math.min(1, (pos - rt0) / Math.max(rt1 - rt0, 0.1)));
   $('#roll-head').style.left = (rf * $('.notes-body').clientWidth) + 'px';
   renderNoteNow(pos);
+  drawFret(pos);
 
   const band = $('#loop-band');
   if (loopActive()) {
