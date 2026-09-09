@@ -219,6 +219,55 @@ yapılıyor (blues'un 6. yarım tonu `b5`, Lidyan'ınki `#4`).
 
 ---
 
+## Şarkı kaynakları
+
+`songs\` klasörüne elle kopyalamanın yanında iki yol daha var. İkisi de
+**isteğe bağlı** — bağımlılığı olmayan makinede düğme kapalı kalır ve sebebi
+yazar.
+
+### Bağlantıdan indirme
+
+Kitaplığın üstündeki alana bağlantı yapıştır, **İndir**'e bas. `yt-dlp`
+sesi indirir, ffmpeg mp3'e çevirir, dosya `songs\` klasörüne düşer.
+
+**Neden mp3'e çeviriyoruz?** Ayırma motoru sesi `sphn` ile okuyor ve sphn
+m4a/webm/opus çözemiyor (ölçüldü). demucs ffmpeg'e düşüyor ama paketlenmiş
+sürümde ffmpeg bulunmuyor. İndirme sırasında çevirince ffmpeg yalnızca bu
+özellik için gerekli oluyor, çekirdek boru hattı ona bağımlı kalmıyor.
+
+**Bakım notu:** `yt-dlp` sık güncelleme ister çünkü siteler iç yapılarını
+değiştiriyor. Paketlenmiş sürümde gömülü kalan bir `yt-dlp` birkaç ay sonra
+çalışmayabilir.
+
+> YouTube'un kullanım şartları kendi sunduğu özellikler dışında indirmeyi
+> yasaklıyor. `yt-dlp`'nin kendisi meşru bir açık kaynak araç; kısıt aracın
+> değil sitenin şartlarından geliyor.
+
+### Sistem sesi kaydı
+
+**Sistem sesini kaydet**'e bas, şarkıyı çal, bitince tekrar bas. Hoparlöre
+giden ses WAV olarak `songs\` klasörüne yazılır — kaynak fark etmez.
+İndirme değil, kayıt.
+
+Sessiz geçen süreler dosyaya yazılmaz, yani kayıt fiilen ses çıktığı anda
+başlar. Önce kaydı başlatıp sonra şarkıyı çalabilirsin.
+
+### Bu ikisinde çıkan üç kusur
+
+Kayıt özelliği yazılırken üç ayrı hata ölçümle yakalandı; hepsi kodda
+yorumla işaretli:
+
+1. **Bloke eden okuma.** Hiçbir şey çalmıyorken WASAPI loopback veri
+   üretmiyor ve `stream.read()` sonsuza kadar asılı kalıyordu — kullanıcı
+   "durdur" dediği halde dosya kilitli kalıyordu. Geri çağırma kipine geçildi.
+2. **Süreç çökmesi (segfault).** Arayüz kayıt sırasında durumu 700 ms'de bir
+   yokluyordu ve her yoklamada yeni bir PyAudio örneği açılıp kapanıyordu; bir
+   thread PortAudio'yu sonlandırırken diğerinde açık akış kalınca süreç
+   çöküyordu. Cihaz bilgisi artık bir kez sorgulanıp önbelleğe alınıyor.
+3. **Durdurma çalışmıyordu.** Yazma döngüsü durdurma bayrağını sadece kuyruk
+   boşaldığında kontrol ediyordu; ses sürekli aktığı için kuyruk hiç
+   boşalmıyor ve döngü çıkmıyordu.
+
 ## Kütüphane yönetimi
 
 Kitaplık başlığında **arama** (yazdıkça süzer), **durum filtresi** (tümü / hazır /

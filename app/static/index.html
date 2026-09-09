@@ -62,6 +62,17 @@
 
 <!-- ------------------------------------------------------------ KİTAPLIK -->
 <section id="library">
+  <!-- Sarki kaynaklari: baglantidan indirme ve sistem sesi kaydi.
+       Ikisi de istege bagli; bagimliligi olmayan makinede sebebi yazar. -->
+  <div class="src-bar">
+    <input id="src-url" class="lib-input" type="url" autocomplete="off"
+           placeholder="Bağlantı yapıştır (YouTube, SoundCloud, arşiv…)">
+    <button id="src-fetch" class="btn">İndir</button>
+    <div class="src-sep"></div>
+    <button id="src-rec" class="btn sec"><span class="rec-dot"></span>Sistem sesini kaydet</button>
+  </div>
+  <div id="src-info" class="src-info"></div>
+
   <div class="lib-bar">
     <input id="lib-search" class="lib-input" type="search" placeholder="Şarkı ara…"
            autocomplete="off" spellcheck="false">

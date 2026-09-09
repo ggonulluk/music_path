@@ -158,6 +158,80 @@ function renderLibrary() {
     `${vis.length < n ? vis.length + ' / ' : ''}${n} şarkı · ${fmtSize(bytes)}`;
 }
 
+/* ====================================================================
+   ŞARKI KAYNAKLARI: bağlantıdan indirme ve sistem sesi kaydı
+   Ikisi de istege bagli; bagimliligi yoksa dugme kapali ve sebep yaziyor.
+   ==================================================================== */
+
+const SRC = { poll: null, recording: false };
+
+async function refreshSources() {
+  let d;
+  try { d = await fetch('/api/sources').then((r) => r.json()); } catch (e) { return; }
+  const info = $('#src-info');
+  const btnF = $('#src-fetch'), btnR = $('#src-rec'), url = $('#src-url');
+  const parts = [];
+
+  btnF.disabled = !d.fetch.available;
+  url.disabled = !d.fetch.available;
+  if (!d.fetch.available) parts.push(`<span class="warn">İndirme kapalı: ${d.fetch.reason}</span>`);
+  else if (d.fetch.state === 'running') {
+    parts.push(`İndiriliyor… ${Math.round(d.fetch.progress * 100)}%` +
+      `<div class="src-prog"><i style="width:${d.fetch.progress * 100}%"></i></div>`);
+  } else if (d.fetch.state === 'error') {
+    parts.push(`<span class="warn">İndirme başarısız: ${d.fetch.error || ''}</span>`);
+  } else if (d.fetch.state === 'done' && d.fetch.file) {
+    parts.push(`İndirildi: <b>${d.fetch.file}</b>`);
+  }
+
+  btnR.disabled = !d.record.available;
+  SRC.recording = d.record.state === 'recording';
+  btnR.classList.toggle('rec-on', SRC.recording);
+  btnR.innerHTML = `<span class="rec-dot"></span>${
+    SRC.recording ? 'Kaydı durdur' : 'Sistem sesini kaydet'}`;
+  if (!d.record.available) parts.push(`<span class="warn">Kayıt kapalı: ${d.record.reason}</span>`);
+  else if (SRC.recording) parts.push(`Kaydediliyor — ${fmt(d.record.seconds)} · ${d.record.device || ''}`);
+  else if (d.record.state === 'error') parts.push(`<span class="warn">Kayıt hatası: ${d.record.error}</span>`);
+  else if (d.record.state === 'done' && d.record.file) parts.push(`Kaydedildi: <b>${d.record.file}</b>`);
+
+  info.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+
+  // Is bittiginde kutuphaneyi bir kez tazele
+  const busy = d.fetch.state === 'running' || SRC.recording;
+  if (SRC.wasBusy && !busy) loadLibrary();
+  SRC.wasBusy = busy;
+
+  clearTimeout(SRC.poll);
+  if (busy) SRC.poll = setTimeout(refreshSources, 700);
+}
+
+function initSources() {
+  $('#src-fetch').onclick = async () => {
+    const u = $('#src-url').value.trim();
+    if (!u) return;
+    const r = await fetch(`/api/fetch?url=${encodeURIComponent(u)}`, { method: 'POST' });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      await confirmDialog('İndirilemedi', e.detail || 'Bilinmeyen hata', 'Tamam');
+      return;
+    }
+    $('#src-url').value = '';
+    refreshSources();
+  };
+  $('#src-url').onkeydown = (e) => { if (e.key === 'Enter') $('#src-fetch').click(); };
+
+  $('#src-rec').onclick = async () => {
+    const path = SRC.recording ? '/api/record/stop' : '/api/record/start';
+    const r = await fetch(path, { method: 'POST' });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      await confirmDialog('Kayıt başlatılamadı', e.detail || 'Bilinmeyen hata', 'Tamam');
+      return;
+    }
+    refreshSources();
+  };
+}
+
 /* Silme geri alinamaz; tek tikla olmamali. Promise<bool> donduruyor. */
 function confirmDialog(title, bodyHTML, okText = 'Sil') {
   return new Promise((resolve) => {
@@ -1307,6 +1381,7 @@ function initControls() {
     clearTimeout(N.poll);
     showView('library');
     loadLibrary();
+    refreshSources();
   };
 
   // Gamlar sayfasi calmayi durdurmuyor - sarki calarken gama bakabilirsin
@@ -1323,6 +1398,7 @@ function initControls() {
   $('#lib-sort').onchange = (e) => { LIB.sort = e.target.value; renderLibrary(); };
   $('#btn-orphans').onclick = scanOrphans;
   document.addEventListener('click', closeMenus);
+  initSources();
 
   $('#file-input').onchange = async (e) => {
     const f = e.target.files[0];
@@ -1363,3 +1439,4 @@ function initControls() {
 
 initControls();
 loadLibrary();
+refreshSources();

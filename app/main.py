@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from mutagen import File as MutagenFile
 
-from . import analysis, library, paths, transcribe
+from . import analysis, fetch, library, paths, record, transcribe
 from .separator import QUEUE, SONGS, STEMS, STEM_ORDER
 
 AUDIO_EXT = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus", ".aac", ".wma"}
@@ -290,6 +290,45 @@ def delete_orphans():
             removed.append(it["name"])
             freed += it["bytes"]
     return {"removed": removed, "freed_bytes": freed}
+
+
+@app.get("/api/sources")
+def sources():
+    """Bağlantıdan indirme ve sistem sesi kaydı kullanılabilir mi."""
+    f_ok, f_why = fetch.available()
+    r_ok, r_why = record.available()
+    dev = record.loopback_device() if r_ok else None
+    return {
+        "fetch": {"available": f_ok, "reason": f_why, **fetch.FETCHER.as_dict()},
+        "record": {"available": r_ok, "reason": r_why,
+                   "device": dev["name"] if dev else None,
+                   **record.RECORDER.as_dict()},
+    }
+
+
+@app.post("/api/fetch")
+def start_fetch(url: str):
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(400, "gecerli bir baglanti degil")
+    ok, why = fetch.available()
+    if not ok:
+        raise HTTPException(503, why)
+    return fetch.FETCHER.start(url, SONGS)
+
+
+@app.post("/api/record/start")
+def record_start(name: str = ""):
+    from datetime import datetime
+    ok, why = record.available()
+    if not ok:
+        raise HTTPException(503, why)
+    label = name.strip() or f"Kayıt {datetime.now():%Y-%m-%d %H.%M}"
+    return record.RECORDER.start(SONGS, label)
+
+
+@app.post("/api/record/stop")
+def record_stop():
+    return record.RECORDER.stop()
 
 
 @app.get("/api/jobs")
