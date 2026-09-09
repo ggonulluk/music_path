@@ -3,3 +3,5 @@
 songs/
 stems/
 __pycache__/
+build/
+dist/

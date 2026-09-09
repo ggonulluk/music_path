@@ -16,7 +16,9 @@ from typing import Optional
 
 from demucs.api import Separator, save_audio
 
-ROOT = Path(__file__).resolve().parent.parent
+from .paths import data_dir
+
+ROOT = data_dir()
 SONGS = ROOT / "songs"
 STEMS = ROOT / "stems"
 

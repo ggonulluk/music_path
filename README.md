@@ -68,6 +68,7 @@ Sağdaki panel, seçtiğin kanaldan çıkarılan notaları piano roll olarak gö
 - Sol kenardaki `e B G D A E` çizgileri açık tel perdeleri.
 - Panelin altında, oynatma kafasının o anda üzerinde olduğu notalar ve
   **tel/perde tahmini** yazar (`C3 A/3` = A teli 3. perde).
+
 ### İki indirme düğmesi — karıştırma
 
 | Düğme | Ne verir | Ne için |
@@ -209,7 +210,59 @@ ve kendiliğinden tazelenir — elle geçersiz kılmaya gerek yok.
 `flex:1` olan piano roll her seferinde yeniden boyutlanıp çiziliyor. Rozet
 akor yokken gizlenmez, boşalır.
 
-## Ortamı başka bilgisayarda kurmak
+## Başka bilgisayarda çalıştırmak
+
+### Taşınabilir paket (Python gerekmez)
+
+```
+.venv\Scripts\python.exe build.py
+```
+
+Çıktı: `dist\StemPlayer\` klasörü (~864 MB) ve `dist\StemPlayer-portable.zip`
+(~392 MB). ZIP'i hedef bilgisayarda aç, `StemPlayer.exe`'ye çift tıkla.
+Python, yönetici hakkı ve internet gerekmez.
+
+Paketle ilgili kararlar:
+
+| Karar | Neden |
+|---|---|
+| `--onedir`, `--onefile` değil | İçinde torch var (541 MB); onefile her açılışta bunu geçici klasöre açar, açılış 20–60 sn sürer |
+| Demucs modelleri gömülü (133 MB) | Yoksa ilk ayırmada internet ister; "kurduğum her bilgisayarda çalışsın" hedefi tutmaz |
+| TensorFlow / basic-pitch **yok** | Tek başına 1.8 GB. Nota çıkarma isteğe bağlı ve kod yokluğunu düzgün karşılıyor |
+| ffmpeg **yok** | Gerekmiyor — demucs mp3'ü `sphn` ile çözüyor (ölçüldü) |
+
+Veriler `songs\` ve `stems\` klasörlerinde, exe'nin yanında durur. Klasörün
+tamamını kopyalarsan şarkılar, ayrılmış kanallar ve analizler birlikte taşınır.
+
+Nota çıkarmayı sonradan eklemek istersen paket klasöründe:
+
+```
+python -m venv .venv-transcribe
+.venv-transcribe\Scripts\python.exe -m pip install -r requirements-transcribe.txt
+```
+
+### Başlatıcı
+
+`launcher.py` (paketin giriş noktası) `start.bat`'ın körlemesine beklemesinin
+yerine geçiyor:
+
+- Port gerçekten dinlemeye başlayınca tarayıcıyı açar
+- Uygulama zaten çalışıyorsa ikinci sunucu başlatmaz, sadece sekmeyi açar
+- 8000'i başka bir program tutuyorsa `/api/health` ile bunu anlar ve
+  sonraki portu dener — alakasız bir sayfaya götürmez
+
+Geliştirmede de çalışır: `.venv\Scripts\python.exe launcher.py`
+
+### Yol çözümü
+
+`app/paths.py` iki kökü ayırır. Karıştırılmamalı:
+
+| | Nerede | İçinde ne var |
+|---|---|---|
+| `bundle_dir()` | pakette `_internal`, geliştirmede proje kökü | statik dosyalar, modeller — salt okunur |
+| `data_dir()` | pakette exe'nin yanı, geliştirmede proje kökü | `songs/`, `stems/` — yazılabilir |
+
+## Kaynaktan kurmak
 
 ```
 python -m venv .venv
@@ -237,13 +290,13 @@ PyTorch'un işlemci sürümü gerekiyorsa:
 - **Nota transkripsiyonu** — piano roll, tel/perde tahmini, MIDI indirme
 - **Akor rozeti** — duyulan notalardan akor adı, analizle çapraz kontrollü
 
+- **Taşınabilir paket** — `build.py` ile tek klasör + ZIP, Python gerekmez,
+  modeller gömülü, internetsiz çalışır
+
 **Sırada**
 
-- Akor şeridi — dalga formu boyunca akor dizisi, "tahmin" olduğu belirtilerek
+- Akor şeridi — dalga formu boyunca akor dizisi
 - Bölüm işaretleri (intro / verse / solo) ve döngüleri kaydetme
 - Sayım metronomu
-
-**Faz 4**
-
-- Tek `.exe` paketleme (PyInstaller) — hedef makinede Python kurulu olmasın
 - Kanal ayarlarını şarkı başına hatırlama
+- İsteğe bağlı: Inno Setup ile kurulum dosyası (Başlat menüsü, kaldırma)

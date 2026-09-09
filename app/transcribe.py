@@ -14,9 +14,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+from .paths import bundle_dir, data_dir
+
+# Transkripsiyon ortami pakete girmiyor (TensorFlow tek basina 1.8 GB).
+# Isteyen exe'nin yanina kendisi kurar - bu yuzden data_dir.
+ROOT = data_dir()
 VENV_PY = ROOT / ".venv-transcribe" / "Scripts" / "python.exe"
-WORKER = ROOT / "tools" / "bp_worker.py"
+# Isci script'i paketin parcasi
+WORKER = bundle_dir() / "tools" / "bp_worker.py"
 CACHE_VERSION = 1
 
 # Davul perdesiz; nota cikarmak anlamsiz olurdu

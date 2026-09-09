@@ -13,11 +13,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from mutagen import File as MutagenFile
 
-from . import analysis, transcribe
+from . import analysis, paths, transcribe
 from .separator import QUEUE, SONGS, STEMS, STEM_ORDER
 
 AUDIO_EXT = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus", ".aac", ".wma"}
-STATIC = Path(__file__).resolve().parent / "static"
+STATIC = paths.bundle_dir() / "app" / "static"
 
 app = FastAPI(title="Stem Player")
 
