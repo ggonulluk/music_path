@@ -13,11 +13,50 @@
   <h1><span class="dot"></span> GgMix</h1>
   <div class="head-right">
     <button id="btn-library" class="ghost">Kitaplık</button>
+    <button id="btn-scales" class="ghost">Gamlar</button>
     <label class="ghost upload">
       Şarkı ekle<input type="file" id="file-input" accept="audio/*" hidden>
     </label>
   </div>
 </header>
+
+<!-- --------------------------------------------------------------- GAMLAR -->
+<section id="scales" class="hidden">
+  <div class="sc-bar">
+    <div class="sc-block">
+      <span class="sc-label">Kök</span>
+      <div id="sc-roots" class="sc-roots"></div>
+    </div>
+    <div class="sc-block">
+      <span class="sc-label">Gam</span>
+      <select id="sc-type" class="lib-select"></select>
+    </div>
+    <button id="sc-fromsong" class="btn sec hidden"></button>
+  </div>
+
+  <div class="sc-head">
+    <div class="sc-name" id="sc-name"></div>
+    <div class="sc-desc" id="sc-desc"></div>
+  </div>
+
+  <div id="sc-notes" class="sc-notes"></div>
+
+  <div class="sc-board">
+    <canvas id="sc-fret"></canvas>
+  </div>
+
+  <div id="sc-boxwrap" class="sc-section hidden">
+    <span class="sc-label">Pentatonik kutuları</span>
+    <div id="sc-boxes" class="sc-chips"></div>
+    <span class="sc-note">Kalın E telindeki kök notadan başlayan 5 standart pozisyon.</span>
+  </div>
+
+  <div id="sc-chordwrap" class="sc-section">
+    <span class="sc-label" id="sc-chordlabel">Akor cetveli</span>
+    <div id="sc-chords" class="sc-chords"></div>
+    <span class="sc-note" id="sc-chordnote"></span>
+  </div>
+</section>
 
 <!-- ------------------------------------------------------------ KİTAPLIK -->
 <section id="library">
@@ -207,6 +246,7 @@
 
 <script src="vendor/SignalsmithStretch.js"></script>
 <script src="fretboard.js"></script>
+<script src="scales.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -147,6 +147,48 @@ Tel/perde tahmini kabadır — en düşük perdeyi seçer, gerçek parmak pozisy
 
 ---
 
+## Gamlar sayfası
+
+Üst çubuktaki **Gamlar** ayrı bir sayfa açar. Şarkı çalarken de açılabilir —
+oynatma durmaz.
+
+Kök nota (12) × gam (13) seçilir, klavyede 15 perde boyunca gamın tüm notaları
+derece etiketleriyle gösterilir (`1 2 b3 4 5 b6 b7`), kök notalar turuncu dolu.
+
+**Gamlar:**
+
+| Grup | |
+|---|---|
+| Temel | Majör, doğal minör, majör/minör pentatonik, blues |
+| Modlar | Dorian, Frigian, Lidyan, Miksolidyan, Lokrian |
+| İleri | Harmonik minör, melodik minör, Frigian dominant |
+
+(Ionian = majör, Aeolian = doğal minör olduğu için ayrıca listelenmedi.)
+
+**Pentatonik kutuları (CAGED).** Pentatonik ve blues seçiliyken 5 standart
+pozisyon çıkar; kalın E telindeki kök notadan başlarlar. A minör pentatonikte
+bu 5-8-10-12-15 verir — gitaristin ezberlediği klasik dizilim. Kutuya tıklayınca
+klavyede o aralık vurgulanır.
+
+**Akor cetveli.** Gamın her derecesi üstüne kurulan üçlüler, roma rakamı ve
+renk koduyla (majör yeşil, minör mavi, eksilmiş kırmızı, artırılmış mor).
+Pentatonik ve blues 7 notalı olmadığı için onlarda ana gamın akorları
+gösterilir — pentatonikle solo yaparken altta zaten o akorlar çalar.
+
+**Şarkının tonu.** Bir şarkı açıksa düğme görünür ve analizin bulduğu tona
+atlar. Şarkı açık değilse gizli kalır.
+
+### Derece adlandırmasında bir incelik
+
+7 notalı gamlarda derece adı **aralıktan değil gamdaki konumdan** gelir.
+Lokrian'ın 8. yarım tonu `b6`'dır, `#5` değil — majörün 6. derecesinin
+pesleştirilmiş hali olduğu için. Sadece aralığa bakan bir kural burada
+yanılıyordu; konum majör ölçütüyle karşılaştırılıp işaret oradan çıkarılıyor.
+Pentatonik ve blues 7 notalı olmadığı için orada aralığa göre adlandırma
+yapılıyor (blues'un 6. yarım tonu `b5`, Lidyan'ınki `#4`).
+
+---
+
 ## Kütüphane yönetimi
 
 Kitaplık başlığında **arama** (yazdıkça süzer), **durum filtresi** (tümü / hazır /

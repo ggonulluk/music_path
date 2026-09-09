@@ -195,8 +195,15 @@ function fretWindow(active, span = 7) {
   return [from, to];
 }
 
+/* opts:
+     active  o anda calinan pozisyonlar (dolu, buyuk, hale ile)
+     marks   gam noktalari (ici bos, derece etiketli) - opsiyonel
+     box     [from, to] vurgulanacak perde araligi (CAGED kutusu)
+     window  gorunecek perde araligi
+*/
 function drawFretboard(cv, opts) {
-  const { active = [], window: win = [0, 7], color = '#ffb347', dim = '#3a4152' } = opts;
+  const { active = [], marks = [], box = null, pad = null,
+          window: win = [0, 7], color = '#ffb347', dim = '#3a4152' } = opts;
   const dpr = window.devicePixelRatio || 1;
   const w = cv.clientWidth, h = cv.clientHeight;
   if (!w || !h) return;
@@ -205,13 +212,23 @@ function drawFretboard(cv, opts) {
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   c.clearRect(0, 0, w, h);
 
-  const padL = 22, padR = 10, padT = 14, padB = 18;
+  // Dolgu ayarlanabilir: 0. perdedeki noktalar tel adlarinin uzerine
+  // biniyor, alt telin noktalari da perde numaralarina degiyordu.
+  // Gam sayfasi gibi nokta yogun gorunumlerde daha genis dolgu gerekiyor.
+  const padL = pad?.l ?? 22, padR = pad?.r ?? 10;
+  const padT = pad?.t ?? 14, padB = pad?.b ?? 18;
   const [f0, f1] = win;
   const nF = Math.max(1, f1 - f0);
   const bw = (w - padL - padR) / nF;          // perde genisligi
   const bh = (h - padT - padB) / 5;           // tel araligi
   const yOf = (s) => padT + (5 - s) * bh;     // s=0 kalin E altta
   const xOf = (f) => padL + (f - f0) * bw;
+
+  // Yaricapi ONCE hesapliyoruz: bos tel noktasi ile tel adi etiketi
+  // birbirine binmesin diye ikisinin yerini buna gore koyuyoruz.
+  const R = Math.min(11, bh * 0.42, bw * 0.40);
+  const openX = padL - R - 3;                 // bos tel noktasi, esigin solunda
+  const labelX = padL - 2 * R - 8;            // tel adi, onun da solunda
 
   // perde isaretleri (nokta)
   c.fillStyle = '#242833';
@@ -243,7 +260,7 @@ function drawFretboard(cv, opts) {
     c.fillStyle = '#5b6273';
     c.font = '10px ui-monospace,Consolas,monospace';
     c.textAlign = 'right'; c.textBaseline = 'middle';
-    c.fillText(STRING_NAMES[s], padL - 6, y);
+    c.fillText(STRING_NAMES[s], labelX, y);
   }
 
   // perde numaralari
@@ -254,11 +271,39 @@ function drawFretboard(cv, opts) {
     c.fillText(String(f), xOf(f) - bw / 2, padT + bh * 5 + 5);
   }
 
+  // CAGED kutusu vurgusu - gam noktalarindan once, arkada kalsin
+  if (box) {
+    const x0 = xOf(Math.max(box[0], f0) - 1) + bw / 2;
+    const x1 = xOf(Math.min(box[1], f1));
+    c.fillStyle = 'rgba(255,179,71,.07)';
+    c.fillRect(Math.max(padL, x0), padT - 4, Math.max(0, x1 - Math.max(padL, x0)), bh * 5 + 8);
+    c.strokeStyle = 'rgba(255,179,71,.45)';
+    c.lineWidth = 1.5;
+    c.strokeRect(Math.max(padL, x0), padT - 4, Math.max(0, x1 - Math.max(padL, x0)), bh * 5 + 8);
+  }
+
+  // gam noktalari: ici bos daireler, derece etiketli. Kok notalar dolu.
+  for (const m of marks) {
+    if (m.fret < f0 || m.fret > f1) continue;
+    const y = yOf(m.string);
+    const x = m.fret === 0 ? openX : xOf(m.fret) - bw / 2;
+    const r = R;
+    c.beginPath(); c.arc(x, y, r, 0, 7);
+    if (m.root) { c.fillStyle = color; c.fill(); }
+    else { c.fillStyle = '#171a22'; c.fill(); c.strokeStyle = '#4a5364'; c.lineWidth = 1.4; c.stroke(); }
+    if (r >= 7 && m.label) {
+      c.fillStyle = m.root ? '#191308' : '#9aa3b4';
+      c.font = `${m.root ? '700 ' : ''}${Math.round(r * 0.85)}px ui-sans-serif,Segoe UI,sans-serif`;
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(m.label, x, y + 0.5);
+    }
+  }
+
   // basili notalar
   for (const a of active) {
     const y = yOf(a.string);
-    const x = a.fret === 0 ? padL - 1 : xOf(a.fret) - bw / 2;
-    const r = Math.min(11, bh * 0.44, bw * 0.42);
+    const x = a.fret === 0 ? openX : xOf(a.fret) - bw / 2;
+    const r = R;
     c.beginPath(); c.arc(x, y, r + 3, 0, 7);
     c.fillStyle = color + '33'; c.fill();          // hale
     c.beginPath(); c.arc(x, y, r, 0, 7);

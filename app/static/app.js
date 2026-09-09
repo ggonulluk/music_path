@@ -463,8 +463,7 @@ function setPitch(n) {
 
 async function openPlayer(song) {
   P.song = song;
-  $('#library').classList.add('hidden');
-  $('#player').classList.remove('hidden');
+  showView('player');
   $('#now-title').textContent = song.title || song.file;
   $('#now-sub').textContent = [song.artist, song.file].filter(Boolean).join(' · ');
   $('#loading').classList.remove('hidden');
@@ -719,6 +718,129 @@ async function loadAnalysis(song) {
    venv'de alt surec olarak kosuyor (TensorFlow ana ortami bozardi).
    ==================================================================== */
 
+/* ====================================================================
+   GAMLAR
+   Muzik teorisi scales.js'te, cizim fretboard.js'te; burada sadece arayuz.
+   ==================================================================== */
+
+const SC = { root: 4, id: 'pentmin', box: null, boxes: null };   // varsayilan E minör pent.
+
+function showView(name) {
+  for (const v of ['library', 'player', 'scales']) {
+    $('#' + v).classList.toggle('hidden', v !== name);
+  }
+}
+
+function buildScaleUI() {
+  const rr = $('#sc-roots');
+  if (!rr.children.length) {
+    Scales.PC.forEach((n, i) => {
+      const b = document.createElement('button');
+      b.className = 'sc-root';
+      b.textContent = n;
+      b.onclick = () => { SC.root = i; SC.box = null; renderScales(); };
+      rr.appendChild(b);
+    });
+  }
+  const sel = $('#sc-type');
+  if (!sel.children.length) {
+    let grp = null;
+    for (const s of Scales.SCALES) {
+      if (s.group !== grp) {
+        grp = s.group;
+        const og = document.createElement('optgroup');
+        og.label = grp;
+        sel.appendChild(og);
+      }
+      const o = document.createElement('option');
+      o.value = s.id;
+      o.textContent = s.name;
+      sel.lastElementChild.appendChild(o);
+    }
+    sel.onchange = () => { SC.id = sel.value; SC.box = null; renderScales(); };
+  }
+}
+
+function renderScales() {
+  const sc = Scales.byId(SC.id);
+  const rootName = Scales.PC[SC.root];
+
+  document.querySelectorAll('.sc-root')
+    .forEach((b, i) => b.classList.toggle('on', i === SC.root));
+  $('#sc-type').value = SC.id;
+  $('#sc-name').textContent = `${rootName} ${sc.name}`;
+  $('#sc-desc').textContent = Scales.SCALE_NOTE[sc.id] || '';
+
+  const names = Scales.noteNames(SC.root, sc.steps);
+  const degs = Scales.degrees(sc.steps);
+  $('#sc-notes').innerHTML = names.map((n, i) =>
+    `<div class="sc-note-chip${i === 0 ? ' root' : ''}"><b>${n}</b><span>${degs[i]}</span></div>`)
+    .join('');
+
+  // Pentatonik kutulari sadece pentatonik/blues icin anlamli
+  const bw = $('#sc-boxwrap');
+  if (sc.caged) {
+    SC.boxes = Scales.pentatonicBoxes(SC.root, sc.steps);
+    bw.classList.remove('hidden');
+    $('#sc-boxes').innerHTML =
+      `<button class="sc-box${SC.box === null ? ' on' : ''}" data-b="">Tümü</button>` +
+      SC.boxes.map((b, i) =>
+        `<button class="sc-box${SC.box === i ? ' on' : ''}" data-b="${i}">Kutu ${b.n}` +
+        `<small>${b.from}–${b.to}. perde</small></button>`).join('');
+    $('#sc-boxes').onclick = (e) => {
+      const t = e.target.closest('.sc-box');
+      if (!t) return;
+      SC.box = t.dataset.b === '' ? null : Number(t.dataset.b);
+      renderScales();
+    };
+  } else {
+    bw.classList.add('hidden');
+    SC.box = null; SC.boxes = null;
+  }
+
+  const dc = Scales.diatonicChords(SC.root, sc);
+  if (dc) {
+    $('#sc-chordwrap').classList.remove('hidden');
+    $('#sc-chords').innerHTML = dc.chords.map((c) =>
+      `<div class="sc-chord ${c.quality}"><b>${c.name}</b><span>${c.roman}</span></div>`).join('');
+    $('#sc-chordnote').textContent = dc.from
+      ? `${rootName} ${dc.from} gamının akorları — pentatonikle solo yaparken altta bunlar çalar.`
+      : 'Gamın her derecesi üstüne kurulan üçlüler.';
+  } else {
+    $('#sc-chordwrap').classList.add('hidden');
+  }
+
+  drawScaleBoard();
+}
+
+function drawScaleBoard() {
+  const sc = Scales.byId(SC.id);
+  const box = (SC.boxes && SC.box !== null)
+    ? [SC.boxes[SC.box].from, SC.boxes[SC.box].to] : null;
+  Fretboard.drawFretboard($('#sc-fret'), {
+    marks: Scales.fretMarks(SC.root, sc.steps, 15),
+    box, window: [0, 15],
+    // 0. perde noktalari tel adlarini ezmesin, alt tel perde
+    // numaralarina degmesin diye genis dolgu
+    pad: { l: 56, r: 14, t: 20, b: 30 },
+  });
+}
+
+/* Acik sarkinin tonuna atla. Analiz yoksa dugme gizli kalir. */
+function updateScaleFromSong() {
+  const btn = $('#sc-fromsong');
+  if (!A.data || !A.data.key) { btn.classList.add('hidden'); return; }
+  const k = A.data.key;
+  btn.classList.remove('hidden');
+  btn.textContent = `Şarkının tonu: ${k.label}`;
+  btn.onclick = () => {
+    SC.root = Scales.PC.indexOf(k.root);
+    SC.id = k.mode === 'minor' ? 'minor' : 'major';
+    SC.box = null;
+    renderScales();
+  };
+}
+
 const N = { stem: 'gitar', data: null, poll: null, song: null,
             fing: null, win: [0, 7], winAt: 0 };
 
@@ -887,7 +1009,7 @@ function drawFret(pos) {
   const cv = $('#fret');
   const hint = $('#fret-hint');
   if (!N.data || !N.fing) {
-    Fretboard.drawFretboard(cv, { active: [], window: [0, 7] });
+    Fretboard.drawFretboard(cv, { active: [], window: [0, 7], pad: { l: 40 } });
     hint.textContent = N.data ? '' : 'notalar çıkarılmadı';
     return;
   }
@@ -900,7 +1022,7 @@ function drawFret(pos) {
     const lo = Math.min(...fretted), hi = Math.max(...fretted);
     if (lo < N.win[0] || hi > N.win[1]) N.win = Fretboard.fretWindow(active, 7);
   }
-  Fretboard.drawFretboard(cv, { active, window: N.win });
+  Fretboard.drawFretboard(cv, { active, window: N.win, pad: { l: 40 } });
   hint.textContent = `perde ${N.win[0]}–${N.win[1]}`;
 }
 
@@ -1145,9 +1267,16 @@ function initControls() {
     pause();
     clearTimeout(analysisPoll);
     clearTimeout(N.poll);
-    $('#player').classList.add('hidden');
-    $('#library').classList.remove('hidden');
+    showView('library');
     loadLibrary();
+  };
+
+  // Gamlar sayfasi calmayi durdurmuyor - sarki calarken gama bakabilirsin
+  $('#btn-scales').onclick = () => {
+    showView('scales');
+    buildScaleUI();
+    updateScaleFromSong();
+    renderScales();
   };
 
   // Kutuphane suzme/siralama - hepsi istemcide, sunucuya gitmiyor
