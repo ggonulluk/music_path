@@ -813,11 +813,35 @@ async function loadAnalysis(song) {
 const SC = { root: 4, id: 'pentmin', box: null, boxes: null,
              chord: null, chords: null };   // varsayilan E minör pentatonik
 
-function showView(name) {
-  for (const v of ['library', 'player', 'scales']) {
-    $('#' + v).classList.toggle('hidden', v !== name);
+const VIEWS = ['library', 'player', 'scales'];
+
+/* Gorunum degistirmek oynaticinin durumunu BOZMUYOR - ses dugumu,
+   tamponlar, dongu, hiz ve fader'lar bellekte kaliyor. Donus anlik;
+   sarkiyi yeniden yuklemek gerekmiyor.
+
+   Adres cubugunda hash tutuluyor ki tarayicinin geri/ileri tuslari da
+   calissin - "bir onceki ekrana don" en dogal boyle oluyor. */
+function showView(name, push = true) {
+  if (name === 'player' && !P.song) name = 'library';
+  for (const v of VIEWS) $('#' + v).classList.toggle('hidden', v !== name);
+
+  const back = $('#btn-player');
+  back.classList.toggle('hidden', !P.song);
+  if (P.song) back.textContent = '◀ ' + (P.song.title || P.song.file).slice(0, 24);
+  for (const [id, v] of [['btn-player', 'player'], ['btn-library', 'library'],
+                         ['btn-scales', 'scales']]) {
+    $('#' + id).classList.toggle('on', name === v);
+  }
+
+  if (push && location.hash !== '#' + name) {
+    history.pushState({ view: name }, '', '#' + name);
   }
 }
+
+window.addEventListener('popstate', () => {
+  const v = (location.hash || '#library').slice(1);
+  showView(VIEWS.includes(v) ? v : 'library', false);
+});
 
 function buildScaleUI() {
   const rr = $('#sc-roots');
@@ -1397,6 +1421,9 @@ function initControls() {
     refreshSources();
   };
 
+  // Yuklu sarkiya don - yeniden yukleme yok, durum zaten yerinde
+  $('#btn-player').onclick = () => showView('player');
+
   // Gamlar sayfasi calmayi durdurmuyor - sarki calarken gama bakabilirsin
   $('#btn-scales').onclick = () => {
     showView('scales');
@@ -1449,6 +1476,18 @@ function initControls() {
     }
   });
 }
+
+/* Logo: app/static/logo.png. Dosya yoksa yerindeki turuncu nokta kalir.
+   Tek yol deneniyor - birden fazla uzanti yoklamak, bulunamayanlar icin
+   konsola 404 basiyordu. */
+(function loadLogo() {
+  const img = $('#logo');
+  img.onload = () => {
+    img.classList.remove('hidden');
+    $('#logo-dot').classList.add('hidden');
+  };
+  img.src = 'logo.png';
+})();
 
 initControls();
 loadLibrary();

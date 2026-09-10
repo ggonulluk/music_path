@@ -4,14 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GgMix</title>
+<link rel="icon" href="favicon.png" type="image/png">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <header>
-  <h1><span class="dot"></span> GgMix</h1>
+  <!-- Logo: app/static/logo.png. Dosya yoksa yerine turuncu nokta kalir. -->
+  <h1>
+    <img id="logo" class="logo hidden" alt="GgMix">
+    <span id="logo-dot" class="dot"></span>
+    GgMix
+  </h1>
   <div class="head-right">
+    <!-- Yuklu sarkiya donus. Gorunum degistirmek oynaticiyi bozmuyor;
+         eksik olan tek sey donus yoluydu. -->
+    <button id="btn-player" class="ghost hidden" title="Çalışmakta olduğun şarkıya dön"></button>
     <button id="btn-library" class="ghost">Kitaplık</button>
     <button id="btn-scales" class="ghost">Gamlar</button>
     <label class="ghost upload">

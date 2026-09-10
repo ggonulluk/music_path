@@ -25,6 +25,8 @@ header{
 }
 h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.3px;display:flex;align-items:center;gap:10px}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
+/* Logo yuvasi - logo.svg / .png birakilinca gorunur, yoksa nokta kalir */
+.logo{height:28px;width:28px;border-radius:7px;display:block;object-fit:cover}
 .head-right{display:flex;gap:8px}
 .ghost{
   background:var(--panel-2);color:var(--fg);border:1px solid var(--line);
@@ -32,6 +34,8 @@ h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.3px;display:flex;alig
   font-family:inherit;transition:.15s;
 }
 .ghost:hover{background:#232732;border-color:#39404f}
+.ghost.on{background:#2f2716;border-color:#6b5420;color:var(--accent)}
+.ghost.hidden{display:none}
 .upload{display:inline-flex;align-items:center}
 
 /* --------------------------------------------------------------- library */
