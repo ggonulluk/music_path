@@ -1477,16 +1477,16 @@ function initControls() {
   });
 }
 
-/* Logo: app/static/logo.png. Dosya yoksa yerindeki turuncu nokta kalir.
-   Tek yol deneniyor - birden fazla uzanti yoklamak, bulunamayanlar icin
-   konsola 404 basiyordu. */
+/* Logo: app/static/logo-band.png. Gorsel "GgMix" yazisini de icerdigi
+   icin yuklenince metin yedegi gizleniyor. Dosya yoksa nokta + metin
+   kaliyor, hata vermiyor. */
 (function loadLogo() {
   const img = $('#logo');
   img.onload = () => {
     img.classList.remove('hidden');
-    $('#logo-dot').classList.add('hidden');
+    $('#logo-fallback').classList.add('hidden');
   };
-  img.src = 'logo.png';
+  img.src = 'logo-band.png';
 })();
 
 initControls();

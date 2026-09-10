@@ -19,14 +19,15 @@ code{background:var(--panel-2);padding:2px 6px;border-radius:5px;font-size:.9em}
 /* ------------------------------------------------------------------ head */
 header{
   display:flex;align-items:center;justify-content:space-between;
-  padding:16px 24px;border-bottom:1px solid var(--line);
+  padding:10px 24px;border-bottom:1px solid var(--line);
   background:linear-gradient(180deg,#12141a,#0d0e12);
   position:sticky;top:0;z-index:20;
 }
 h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.3px;display:flex;align-items:center;gap:10px}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
 /* Logo yuvasi - logo.svg / .png birakilinca gorunur, yoksa nokta kalir */
-.logo{height:28px;width:28px;border-radius:7px;display:block;object-fit:cover}
+.logo{height:58px;width:auto;border-radius:8px;display:block}
+#logo-fallback{display:inline-flex;align-items:center;gap:10px}
 .head-right{display:flex;gap:8px}
 .ghost{
   background:var(--panel-2);color:var(--fg);border:1px solid var(--line);
