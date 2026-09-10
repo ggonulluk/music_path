@@ -108,8 +108,9 @@ def run_pyinstaller(models: Path) -> None:
 
 def write_readme(out: Path) -> None:
     (out / "OKUBENI.txt").write_text(
-        "GgMix - tasinabilir surum\n"
-        "=" * 40 + "\n\n"
+        # Bitisik iki metin once birlesip sonra 40'la carpiliyordu:
+        # basligin kendisi 40 kez tekrarlaniyordu. Aradaki "+" sart.
+        "GgMix - tasinabilir surum\n" + "=" * 40 + "\n\n"
         "CALISTIRMA\n"
         "  GgMix.exe dosyasina cift tikla.\n"
         "  Tarayici kendiliginden acilir. Kapatmak icin konsol\n"
