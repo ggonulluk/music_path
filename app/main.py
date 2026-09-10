@@ -11,7 +11,12 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from mutagen import File as MutagenFile
+# mutagen DEGIL tinytag: mutagen GPL-2.0-or-later ve paketlenip dagitildiginda
+# tum programi GPL sartlarina sokuyor. Kullandigimiz tek sey baslik/sanatci/
+# sure; tinytag (MIT) tam olarak bunu veriyor. Ayni dosyalarda karsilastirildi:
+# baslik ve sanatci birebir ayni, sure VBR tahmininde ~0.5 sn farkli (gosterimde
+# ayni dakikayi veriyor, oynatici sureyi zaten cozulmus sesten aliyor).
+from tinytag import TinyTag
 
 from . import analysis, fetch, library, paths, record, transcribe
 from .separator import QUEUE, SONGS, STEMS, STEM_ORDER
@@ -70,16 +75,18 @@ def metadata(path: Path) -> dict:
 
     hit = _meta_cache.get(key)
     if hit and stamp and hit[0] == stamp:
+        # DIKKAT: onbellekteki sozluk REFERANSLA donuyor. Bugun guvenli,
+        # cunku describe() bunu `**metadata(path)` ile kopyaliyor. Doneni
+        # yerinde degistiren biri onbellegi bozar.
         return hit[1]
 
     title, artist, duration = path.stem, None, None
     try:
-        tags = MutagenFile(path, easy=True)
-        if tags is not None:
-            if tags.info is not None:
-                duration = round(float(tags.info.length), 2)
-            title = _fix_encoding((tags.get("title") or [title])[0])
-            artist = _fix_encoding((tags.get("artist") or [None])[0])
+        tags = TinyTag.get(str(path))
+        if tags.duration:
+            duration = round(float(tags.duration), 2)
+        title = _fix_encoding(tags.title) or title
+        artist = _fix_encoding(tags.artist)
     except Exception:
         pass
 
@@ -138,7 +145,14 @@ def describe(sid: str, path: Path, can_tr: bool | None = None) -> dict:
 @app.get("/api/songs")
 def list_songs():
     can_tr = transcribe.available()
-    return [describe(sid, p, can_tr) for sid, p in scan().items()]
+    lib = scan()
+    # Uygulama disinda silinen dosyalarin onbellek kaydini birak. Kayit
+    # basina ~200 bayt; sizinti degil ama isler icin cozulen sorunun
+    # (bitmis islerin budanmasi) aynisi.
+    live = {str(p) for p in lib.values()}
+    for stale in [k for k in _meta_cache if k not in live]:
+        _meta_cache.pop(stale, None)
+    return [describe(sid, p, can_tr) for sid, p in lib.items()]
 
 
 @app.get("/api/songs/{sid}")

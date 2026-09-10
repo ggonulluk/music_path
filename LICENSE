@@ -1,0 +1,25 @@
+Telif Hakkı (c) 2026 Gökhan Gönüllü
+
+Bu, kişisel kullanım için yazılmış bir projedir. Tüm hakları saklıdır.
+
+Bu depodaki kaynak kodu izinsiz kopyalanamaz, değiştirilemez, dağıtılamaz
+ya da türev çalışma üretmek için kullanılamaz.
+
+---
+
+ÜÇÜNCÜ TARAF BİLEŞENLER
+
+Bu proje, kendi lisansları altında dağıtılan açık kaynak kütüphaneler
+kullanır. Yukarıdaki koşullar YALNIZCA bu depodaki kendi kodumuz için
+geçerlidir; üçüncü taraf bileşenler kendi lisanslarına tabidir.
+
+Ayrıntılı liste ve paketleme kısıtları: THIRD-PARTY-NOTICES.md
+
+---
+
+NOT
+
+Bu dosya bugünkü niyeti kaydediyor: program dağıtılmıyor, kişisel bir
+çalışma aracı olarak kullanılıyor. İleride paylaşmak istersen bu dosyayı
+değiştirmen yeterli — ama önce THIRD-PARTY-NOTICES.md'deki paketleme
+kısıtlarını oku, çünkü bazıları dağıtımla birlikte yükümlülük doğuruyor.

@@ -91,6 +91,11 @@ def run_pyinstaller(models: Path) -> None:
         # nota cikarma ayri ortamda; bunlar pakete girmemeli
         "--exclude-module=tensorflow",
         "--exclude-module=basic_pitch",
+        # mutagen GPL-2.0: paketlenirse tum programi GPL sartlarina sokar.
+        # Etiket okuma tinytag'e (MIT) tasindi; yt-dlp de mutagen'i istege
+        # bagli kullaniyor. Ilerideki bir kurulum onu geri getirirse diye
+        # dislama burada dursun.
+        "--exclude-module=mutagen",
         "--exclude-module=matplotlib",
         "--exclude-module=tkinter",
         "--exclude-module=PyInstaller",

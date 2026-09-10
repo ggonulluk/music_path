@@ -119,6 +119,16 @@ async function loadLibrary() {
   LIB.songs = await fetch('/api/songs').then((r) => r.json());
   renderLibrary();
 
+  // jobStates'i BURADA tohumla. Yoksa pollJobs bir isi ilk kez gordugunde
+  // "onceki durum" bilinmiyor ve bitis gecisi hic yakalanmiyordu: is,
+  // kutuphane yuklendikten sonraki ilk 1.5 saniyede biterse satir
+  // "ayriliyor" yazili asili kaliyordu.
+  for (const s of LIB.songs) {
+    for (const j of [s.job, s.analysis_job]) {
+      if (j) jobStates[`${j.kind}:${j.stem || ''}:${j.song_id}`] = j.state;
+    }
+  }
+
   const busy = LIB.songs.some((s) => s.state === 'running' || s.state === 'queued');
   clearTimeout(pollTimer);
   if (busy) pollTimer = setTimeout(pollJobs, 1500);
@@ -327,8 +337,11 @@ async function pollJobs() {
     if (meta && j.state === 'running') meta.textContent = `${j.stage || ''} · %${pct}`;
   }
 
-  if (finished) { loadLibrary(); return; }   // loadLibrary yeniden zamanlar
-  if (busy) pollTimer = setTimeout(pollJobs, 1500);
+  // busy false ise: bu yoklama zaten "bir sey calisiyor" diye baslamisti,
+  // artik calismiyorsa bitmis demektir. Tohumlama atlansa bile bu ikinci
+  // koruma satirin asili kalmasini engelliyor.
+  if (finished || !busy) { loadLibrary(); return; }   // loadLibrary yeniden zamanlar
+  pollTimer = setTimeout(pollJobs, 1500);
 }
 
 function songRow(s) {

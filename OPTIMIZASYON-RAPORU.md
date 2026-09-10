@@ -1,10 +1,25 @@
 # GgMix — Optimizasyon, Kaynak Kullanımı ve Kütüphane Yönetimi
 
-**Tarih:** 2026-09-08 · **Kapsam:** `app/` (FastAPI + statik ön yüz), `.venv` / `.venv-transcribe`
+**Tarih:** 2026-09-08 · **2. sürüm:** 2026-09-10 (lisans denetimi eklendi, §7)
+**Kapsam:** `app/`, `build.py` / `launcher.py`, `.venv` / `.venv-transcribe`
 **Durum:** Salt okunur denetim. Bu raporu hazırlarken **hiçbir kod değiştirilmedi.**
 
 Bu belge bir uygulama ajanına devredilmek üzere yazıldı. Her sayı bu makinede
 ölçüldü; türetilmiş olanlar "hesap" diye işaretlendi.
+
+> **2. sürüm notu:** §2①②③, §3.3 ve §4.2 uygulandı (commit `9d7b13f`) ve doğrulandı —
+> ayrıntı §8'deki durum tablosunda. Bu turda **lisans denetimi** eklendi (§7);
+> paketleme başladığı için (`build.py`) lisans soruları artık teorik değil.
+
+> ### ❗ Açık kusur — bu turda bulunan tek gerçek hata
+>
+> **`app/static/app.js` → `pollJobs()`, `finished` bayrağı hiç tetiklenmeyebiliyor.**
+> Bir iş, kütüphane yüklendikten sonraki ilk 1.5 saniye içinde `done`/`error`'a ulaşırsa
+> yoklama durur ve satır "ayrılıyor" yazılı asılı kalır. Ayırma ve analiz için erişilemez;
+> **hızlı hata veren indirme ve nota çıkarma yolları için erişilebilir.**
+>
+> Tam teşhis, erişilebilirlik analizi ve düzeltme önerisi: **§2①**. Öncelik listesinde **A**.
+> Düzeltme birkaç satır, riski düşük — sıradaki ilk iş bu olmalı.
 
 ---
 
@@ -76,6 +91,41 @@ yüklendiğinde değişir.
 
 **Kabul ölçütü:** Ayırma çalışırken, kütüphane büyüklüğünden bağımsız olarak poll başına
 disk erişimi = 0. Var olan davranış (ilerleme çubuğu, iş bitince listenin tazelenmesi) korunur.
+
+#### ✅ Uygulandı — ama bir açık kusur bıraktı
+
+Doğrulandı: tüm JS'te `/api/songs`'a giden tek çağrı kaldı (`app.js:119`), üzerinde timer yok.
+Yapısal hedef tutturulmuş.
+
+**Açık kusur** — `app/static/app.js`, `pollJobs()`:
+
+```js
+const prev = jobStates[key];
+if (prev && prev !== j.state && (j.state === 'done' || j.state === 'error')) {
+```
+
+`jobStates` yalnızca `pollJobs` içinde doluyor; `loadLibrary` doldurmuyor. Dolayısıyla bir işi
+**ilk kez gördüğünde `prev` tanımsız** ve `finished` asla tetiklenmiyor.
+
+Bir iş, `loadLibrary`'den sonraki ilk 1.5 saniye içinde `done`/`error`'a ulaşırsa
+`finished` **ve** `busy` false kalır → yoklama durur, satır "ayrılıyor" yazılı asılı kalır;
+kullanıcı kütüphaneden çıkıp girene kadar düzelmez.
+
+- Ayırma (dakikalar) ve analiz (14–35 sn) için erişilemez.
+- **Hızlı hata veren yollar için erişilebilir** — özellikle indirme (`app/fetch.py`) ve
+  nota çıkarma uçları anında hata döndürebilir.
+
+**Düzeltme:** `loadLibrary` yanıtta zaten `job` ve `analysis_job` alanlarını alıyor;
+`jobStates`'i oradan tohumlayın, `prev` her zaman dolu olsun. `prev &&` koşulunu tek başına
+kaldırmak işe yaramaz — o zaman her sayfa açılışında eski bitmiş işler yüzünden gereksiz bir
+`/api/songs` çağrısı doğar.
+
+**İki küçük not:**
+- `_meta_cache` silinen dosyaların kaydını hiç atmıyor — işler için çözülen sorunun (§3.3)
+  aynısı. Kayıt başına ~200 bayt, aciliyeti yok.
+- `metadata()` önbellekteki sözlüğü **referansla** döndürüyor. Bugün güvenli, çünkü
+  `describe()` `**metadata(path)` ile kopyalıyor. İleride biri döneni değiştirirse önbellek
+  bozulur — küçük bir yorum satırı bunu ilerideki okura anlatır.
 
 ### ② Metadata önbelleği — `(mtime, size)` anahtarlı
 
@@ -260,6 +310,7 @@ etmeye kalkışmak gerçek bir gerilemeye yol açar.
 | Tek stretch düğümünün 12 kanal taşıması | Altı ayrı stretcher kanallar arası kaymaya yol açar; tek hesap bunu imkânsız kılar. |
 | Analiz kaynağının armonik kanallar olması | Davul ve vokali atmak akor bölümlerini 113'ten 90'a indirdi — ölçülmüş. |
 | `requirements.txt`'in tam sabitlenmiş olması | Lokal araç için doğru. |
+| `build.py`'de `--onedir` (`--onefile` değil) | LGPL'li `lameenc` ve `soxr`'ın değiştirilebilirlik şartını doğal olarak sağlıyor. Onefile'a geçmek lisans yükümlülüğü doğurur — bkz. §7.2. |
 
 **Bilinen worklet tuzakları:** `numberOfInputs: 0` worklet'i patlatır; `schedule()` sonrası
 `start()` girişi sıfırlar. Ses motoruna dokunan her değişiklikte bunlar tekrar kontrol edilmeli.
@@ -286,27 +337,147 @@ işin parçasıdır, sonradan eklenecek bir ayrıntı değil.
 
 ---
 
-## 7. Öncelik sırası
+## 7. Lisans denetimi
 
-| # | İş | Etki | Emek | Risk |
-|---|---|---|---|---|
-| 1 | Yoklamayı `/api/jobs`'a taşı (§2①) | Yüksek — poll maliyetini ölçekten koparır | Düşük | Düşük |
-| 2 | Metadata önbelleği (§2②) | Yüksek — %94'lük maliyeti siler | Düşük | Düşük |
-| 3 | `can_transcribe`'ı istek başına hesapla (§2③) | Düşük ama bedava | Çok düşük | Yok |
-| 4 | `requirements-transcribe.txt` üret (§4.2) | Faz 4 için engelleyici | Çok düşük | Yok |
-| 5 | Kesinleşen stem'leri erken yaz ve bırak (§3.1) | Orta — tepeyi %40 kırar | Orta | Orta (çıktı doğrulanmalı) |
-| 6 | Bitmiş işleri buda (§3.3) | Düşük | Düşük | Düşük |
-| 7 | Öksüz stem temizliği (§4.1) | Kütüphane büyürse orta | Orta | Orta (silme — kuru çalıştırma şart) |
-| 8 | Mobil ses profili: mono @32k (§3.2) | Android'in ön koşulu | Orta | Düşük |
-| 9 | `scandir` (§2④) | ① yapıldıysa yok | Düşük | Düşük |
-| 10 | SQLite manifest (§4.1) | Yüzlerce şarkıda yüksek | Yüksek | Orta |
+**Kural:** Bu lisansların yükümlülüklerinin neredeyse tamamı **dağıtımda** doğar, kullanımda
+değil. Uygulama kendi makinelerinizde kaldığı sürece bugün **hiçbir ihlal yok.** Ama
+`build.py` ve `launcher.py` eklendi — paketleme başladı, dolayısıyla aşağısı artık teorik değil.
 
-**1–4 arası düşük riskli ve bugün yapılabilir. 5–10 için önce ölçüm, sonra değişiklik.**
+Denetim yöntemi: her iki venv'deki `*.dist-info/METADATA` dosyalarından `License` /
+`License-Expression` / `Classifier: License` alanları okundu (144 paket), kritik olanlar
+LICENSE dosyasından tek tek doğrulandı.
+
+### 7.1 Kırmızı — dağıtırsanız sorun
+
+**`mutagen` 1.48.1 → GPL-2.0-or-later.** En ciddi kalem. `app/main.py` içinde modül
+seviyesinde `import` ediliyor, pakete kesin giriyor. GPL'li bir kütüphaneyi paketleyip
+dağıtmak **tüm dağıtılan programı GPL-2.0 şartlarına sokar** — kaynağı aynı lisansla açma
+yükümlülüğü doğar.
+
+> Kullanılan tek şey başlık / sanatçı / süre. **`tinytag` (MIT)** tam olarak bunu veriyor;
+> değişiklik `metadata()` içinde birkaç satır. Dağıtım düşünülüyorsa en yüksek getirili
+> tek hamle budur.
+
+**`yt-dlp` 2026.8.19 → Unlicense (kamu malı).** *Yazılım lisansı* açısından tamamen temiz.
+Risk lisans değil, **içerik hakları**: yayın sitelerinden indirmeyi otomatikleştirmek o
+sitelerin kullanım şartlarını ihlal eder ve kaynağa/ülkeye göre telif sorunu doğurabilir.
+Kendi materyalini kendi makinende işlemek başka, bunu yapan bir aracı dağıtmak başka.
+
+`build.py` bunu **dışlamıyor**, yani pakete girecek. `.exe` paylaşılacaksa kaldırılacak ya da
+"kendi dosyanı getir"e indirgenecek ilk madde bu.
+
+### 7.2 Sarı — dağıtımda dikkat
+
+**`lameenc` 1.8.4 → LGPL-3.0-or-later** (LAME sarmalayıcısı; mp3 yazımının kritik yolunda,
+demucs `save_audio` üzerinden) ve **`soxr` 1.1.0 → LGPL-2.1-or-later** (librosa/soundfile
+yeniden örnekleme). Zayıf copyleft: kullanıcının bu bileşeni değiştirebilmesi gerekir.
+
+> **İyi haber ve korunması gereken karar:** `build.py` **`--onedir`** kullanıyor,
+> `--onefile` değil. Onedir'de DLL'ler klasörde ayrı dosyalar olarak durur ve LGPL'in bu
+> şartı doğal olarak sağlanır. **`--onefile`'a geçilirse durum zorlaşır** — bu tercihi
+> bilinçli koruyun.
+
+**ffmpeg — Gyan `full_build`, yani GPL derlemesi** (`ffmpeg-9.0.1-full_build`, WinGet ile
+ayrıca kurulmuş). Uygulama onu **harici program olarak** çağırıyor; bu "kol mesafesinde"
+sayılır, bulaşma yok. **O ikiliyi pakete koymayın.** Şart olursa LGPL derlemesi kullanın.
+
+**`certifi`, `tqdm` → MPL-2.0.** Dosya bazlı copyleft; değiştirmeden paketlemek yeterli,
+yalnızca bildirimleri taşıyın.
+
+### 7.3 Yeşil — sorun yok
+
+**`PyInstaller` 6.22.2 → GPLv2-or-later, ama özel istisnalı.** METADATA'dan birebir
+doğrulandı: *"with a special exception which allows to use PyInstaller to build and
+distribute non-free programs (including commercial ones)"*. Çıktıya hiçbir yükümlülük
+binmiyor. Otomatik taramalarda copyleft diye işaretlenir — **yanlış alarm**.
+
+**Demucs 4.1.0 → MIT (Meta Platforms).** LICENSE dosyasından doğrulandı. Ağırlıklar
+`https://dl.fbaipublicfiles.com/demucs/` üzerinden geliyor ve `build.py` bunları pakete
+gömüyor (`adefossez/HTDemucs`, `adefossez/HTDemucs-6s`), deponun MIT lisansı altında.
+
+> **Dürüstçe işaretlenmesi gereken gri alan:** htdemucs modelleri **MUSDB18-HQ** üzerinde
+> eğitildi; o veri seti **CC BY-NC-SA** (ticari kullanım yasak). Meta ağırlıkları MIT olarak
+> yayınlıyor. Eğitim verisinin türev modelin ticari kullanımını kısıtlayıp kısıtlamadığı
+> yerleşmiş bir soru değil ve bu denetimde çözülemez. Kişisel kullanımda önemi yok;
+> **satış düşünülürse** hukukçuya sorulacak tek madde budur.
+
+**Geri kalan 144 paketin tamamı izin verici:** torch Apache-2.0, torchaudio BSD,
+librosa ISC, FastAPI / pydantic / uvicorn / PyYAML MIT, numpy / scipy / scikit-learn BSD-3,
+huggingface_hub Apache-2.0, sphn Apache-2.0, TensorFlow Apache-2.0,
+basic-pitch Apache-2.0 (Spotify), PyAudioWPatch Apache-2.0.
+
+**Vendor JS örnek alınacak durumda.** `app/static/vendor/NOTICE.md` paketi, sürümü (1.3.2),
+MIT lisansını, kaynak deposunu ve "değiştirilmeden kopyalandı" notunu içeriyor. Bu tam olarak
+olması gereken şey — yeni bir vendor dosyası eklenirse aynı biçimde belgelensin.
+
+**Depo temiz.** `git ls-files` üzerinde doğrulandı: hiçbir ses dosyası commit edilmemiş,
+`songs/` ve `stems/` gitignore'da.
+
+### 7.4 Eksik olan iki şey
+
+1. **Projenin kendi LICENSE dosyası yok.** Dağıtım düşünülüyorsa şart. Ayrıca MIT / BSD /
+   Apache'nin hepsi kendi telif bildirimlerinin taşınmasını istiyor: paketle birlikte giden
+   **toplu bir üçüncü taraf bildirim dosyası** (`THIRD-PARTY-NOTICES.txt`) gerekiyor.
+   `pip-licenses` ile üretilip `build.py`'nin çıktı klasörüne kopyalanabilir.
+2. **`build.py`'de `--exclude-module=yt_dlp` yok.** TensorFlow ve basic_pitch doğru şekilde
+   dışlanmış (§4.2'de önerilen ~1.7 GB kazanç alınmış), ama yt-dlp pakete girecek — 7.1'deki
+   karar verilmeden paketlenmemeli.
+
+### 7.5 Özet
+
+| Bileşen | Lisans | Kişisel kullanım | Dağıtım |
+|---|---|---|---|
+| mutagen | GPL-2.0-or-later | sorun yok | **tüm programı GPL'e sokar** |
+| yt-dlp | Unlicense | kod temiz, içerik riski var | **karar gerekiyor** |
+| lameenc | LGPL-3.0-or-later | sorun yok | onedir ile uygun |
+| soxr | LGPL-2.1-or-later | sorun yok | onedir ile uygun |
+| ffmpeg (Gyan full) | GPL | harici çağrı, sorun yok | **paketlemeyin** |
+| certifi, tqdm | MPL-2.0 | sorun yok | bildirim taşıyın |
+| PyInstaller | GPLv2 + istisna | sorun yok | sorun yok |
+| Demucs kodu + ağırlıklar | MIT | sorun yok | sorun yok (ticari için §7.3 notu) |
+| Diğer 136 paket | MIT/BSD/Apache/ISC | sorun yok | bildirim taşıyın |
 
 ---
 
-## 8. Kapanış kuralı
+## 8. Öncelik ve durum
+
+### Yapıldı (commit `9d7b13f`, doğrulandı)
+
+| # | İş | Doğrulama |
+|---|---|---|
+| 1 | Yoklama `/api/jobs`'a taşındı (§2①) | Tüm JS'te tek `/api/songs` çağrısı, timer yok. **Bir açık kusur bıraktı — §2①** |
+| 2 | Metadata önbelleği (§2②) | Süreç içinde ölçüldü: sıcak isabet 0.047 ms, ayrıştırma 6.66 ms → ~140x |
+| 3 | `can_transcribe` istek başına (§2③) | Kod incelemesi; tekil `get_song` yolu da doğru |
+| 4 | `requirements-transcribe.txt` (§4.2) | 64 paket sabitlendi |
+| 6 | Bitmiş işleri buda (§3.3) | `KEEP_FINISHED = 40`; yalnız `done`/`error` budanıyor, yeni biten iş korunuyor, kilit çakışması yok |
+
+Beşi de sonraki 4 commit'te (fretboard, gamlar, akor basılışları, şarkı kaynakları) bozulmadan durmuş.
+
+### Açık
+
+| # | İş | Etki | Emek | Risk |
+|---|---|---|---|---|
+| A | `pollJobs` `finished` kusuru (§2①) | **Açık kusur** — UI takılı kalabiliyor | Çok düşük | Düşük |
+| B | `yt_dlp` paketleme kararı (§7.1, §7.4) | Dağıtımın önkoşulu | Düşük | — (karar) |
+| C | LICENSE + üçüncü taraf bildirimleri (§7.4) | Dağıtımın önkoşulu | Düşük | Yok |
+| D | `mutagen` → `tinytag` (§7.1) | Dağıtımda GPL'i kaldırır | Düşük | Düşük |
+| E | Kesinleşen stem'leri erken yaz ve bırak (§3.1) | Orta — tepeyi %40 kırar | Orta | Orta (çıktı doğrulanmalı) |
+| F | Öksüz stem temizliği (§4.1) | Kütüphane büyürse orta | Orta | Orta (silme — kuru çalıştırma şart) |
+| G | Mobil ses profili: mono @32k (§3.2) | Android'in ön koşulu | Orta | Düşük |
+| H | `scandir` (§2④) | ① yapıldığı için yok | Düşük | Düşük |
+| I | SQLite manifest (§4.1) | Yüzlerce şarkıda yüksek | Yüksek | Orta |
+
+**A bir kusur, hemen yapılabilir. B–D dağıtım yapılacaksa yapılmalı, kod riski yok.
+E–I için önce ölçüm, sonra değişiklik.**
+
+---
+
+## 9. Kapanış kuralı
 
 Bu projede geçerli bir ders var: **müzikal ya da başarımsal varsayımları ölçmeden iddia etme.**
 Yukarıdaki her sayı bu makinede ölçüldü. Bir değişiklik yapmadan önce ölçümü tekrarlayın,
 sonra tekrar ölçüp farkı belgeleyin — özellikle §3.1 ve §3.2'de.
+
+Aynısı lisans için de geçerli: §7'deki her satır kurulu paketin kendi METADATA ve LICENSE
+dosyasından okundu, hatırlamayla değil. Yeni bir bağımlılık eklendiğinde tarama tekrarlansın —
+tek bir GPL'li paket dağıtım planını değiştirmeye yeter.
