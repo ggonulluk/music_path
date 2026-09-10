@@ -6,11 +6,14 @@ muzik dosyalari hicbir yere yuklenmez.
 from __future__ import annotations
 
 import hashlib
+import os
+import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 # mutagen DEGIL tinytag: mutagen GPL-2.0-or-later ve paketlenip dagitildiginda
 # tum programi GPL sartlarina sokuyor. Kullandigimiz tek sey baslik/sanatci/
 # sure; tinytag (MIT) tam olarak bunu veriyor. Ayni dosyalarda karsilastirildi:
@@ -18,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 # ayni dakikayi veriyor, oynatici sureyi zaten cozulmus sesten aliyor).
 from tinytag import TinyTag
 
-from . import analysis, fetch, library, paths, record, transcribe
+from . import analysis, fetch, library, mixdown, paths, record, transcribe
 from .separator import QUEUE, SONGS, STEMS, STEM_ORDER
 
 AUDIO_EXT = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus", ".aac", ".wma"}
@@ -394,6 +397,70 @@ def audio(sid: str, stem: str):
     if not path.exists():
         raise HTTPException(404, "kanal henuz uretilmedi")
     return FileResponse(path, media_type="audio/mpeg")
+
+
+def _parse_gains(raw: str) -> dict[str, float]:
+    """'gitar:0,davul:1,bas:0.8' -> {'gitar': 0.0, 'davul': 1.0, 'bas': 0.8}
+
+    Kazanclari tarayici hesapliyor (solo/sustur karari fader ile carpilmis
+    halde). Sunucu ham durumu yeniden yorumlamiyor ki duyulan ile inen
+    arasinda ikinci bir dogruluk kaynagi olmasin.
+    """
+    gains: dict[str, float] = {}
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        name, _, value = part.partition(":")
+        if name not in STEM_ORDER:
+            raise HTTPException(400, f"gecersiz kanal: {name}")
+        try:
+            gains[name] = max(0.0, min(1.3, float(value)))
+        except ValueError:
+            raise HTTPException(400, f"gecersiz kazanc: {part}")
+    return gains
+
+
+@app.get("/api/songs/{sid}/mix.mp3")
+def mix_download(sid: str, g: str = ""):
+    """Mikserde duyulan miksi tek mp3 olarak dondurur.
+
+    Senkron calisiyor: 3.7 dakikalik sarkida 5 kanal ~11 sn suruyor.
+    FastAPI "def" uclari zaten thread havuzunda calistirdigi icin olay
+    dongusu bloke olmuyor; ayirma surerken ikisi ayni islemciyi
+    paylastigindan miks belirgin yavaslar.
+    """
+    lib = scan()
+    if sid not in lib:
+        raise HTTPException(404, "sarki bulunamadi")
+    stem_dir = STEMS / lib[sid].stem
+    if not stem_dir.is_dir():
+        raise HTTPException(404, "kanallar henuz uretilmedi")
+
+    gains = _parse_gains(g)
+    if not any(v > mixdown.EPS for v in gains.values()):
+        raise HTTPException(400, "acik kanal yok")
+
+    handle, tmp = tempfile.mkstemp(prefix="ggmix-mix-", suffix=".mp3")
+    os.close(handle)
+    tmp_path = Path(tmp)
+    try:
+        info = mixdown.mix(stem_dir, gains, tmp_path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+    return FileResponse(
+        tmp_path,
+        media_type="audio/mpeg",
+        filename=f"{lib[sid].stem} - miks.mp3",
+        headers={
+            "X-Mix-Atten-Db": str(info["atten_db"]),
+            "X-Mix-Seconds": str(info["seconds"]),
+        },
+        # Dosya gonderildikten sonra silinsin - diskte miks birikmesin.
+        background=BackgroundTask(lambda: tmp_path.unlink(missing_ok=True)),
+    )
 
 
 @app.get("/api/health")

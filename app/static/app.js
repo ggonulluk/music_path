@@ -451,15 +451,31 @@ const P = {
 
 function anySolo() { return STEMS.some((s) => P.solo[s.id]); }
 
+/* Bir kanal duyuluyor mu: solo varsa sadece solo'lananlar, yoksa
+   susturulmayanlar. */
+function channelOn(id, solo) { return solo ? !!P.solo[id] : !P.mute[id]; }
+
+/* Kanallarin duyulan kazanclari: solo/sustur karari fader ile carpilmis.
+   Hem ses motoru hem miks indirme bunu kullaniyor - indirdigin dosyanin
+   duydugundan farkli olmasinin yolu yok. */
+function effectiveGains() {
+  const solo = anySolo();
+  const out = {};
+  for (const s of STEMS) out[s.id] = channelOn(s.id, solo) ? P.vol[s.id] : 0;
+  return out;
+}
+
 function applyGains() {
   const solo = anySolo();
+  const eff = effectiveGains();
   for (const s of STEMS) {
-    const on = solo ? !!P.solo[s.id] : !P.mute[s.id];
     const g = P.gains[s.id];
-    if (g) g.gain.setTargetAtTime(on ? P.vol[s.id] : 0, P.ctx.currentTime, 0.012);
+    if (g) g.gain.setTargetAtTime(eff[s.id], P.ctx.currentTime, 0.012);
     const ch = document.getElementById('ch-' + s.id);
-    if (ch) ch.classList.toggle('silent', !on);
+    // Fader'i sifira cekmek kanali soluklastirmaz - sadece sustur/solo.
+    if (ch) ch.classList.toggle('silent', !channelOn(s.id, solo));
   }
+  updateMixLabel();
 }
 
 function loopActive() {
@@ -693,6 +709,106 @@ function buildMixer() {
       applyGains();
     };
     m.appendChild(el);
+  }
+}
+
+/* ====================================================================
+   MİKS İNDİRME  -  duyulan hali tek mp3 olarak
+   ==================================================================== */
+
+// Turkce ekler kurala degil bu tabloya gore uretiliyor; alti kanal icin
+// tablo yazmak, kelimeye bakip unlu uyumu tahmin etmekten guvenli.
+// "diger" icin ek tuhaf kactigindan o durumda kanal sayisi yaziliyor.
+const WITHOUT = {
+  gitar: 'gitarsız', vokal: 'vokalsiz', davul: 'davulsuz',
+  bas: 'bassız', piyano: 'piyanosuz',
+};
+
+const MIX_EPS = 0.005;   // sunucudaki mixdown.EPS ile ayni
+
+/* Su anki mikser durumunun ne indirecegi: acik kanallar ve dosya adi. */
+function mixPlan() {
+  const eff = effectiveGains();
+  const on = STEMS.filter((s) => eff[s.id] > MIX_EPS);
+  const off = STEMS.filter((s) => !(eff[s.id] > MIX_EPS));
+  let name;
+  if (!on.length) name = null;
+  else if (!off.length) name = 'miks';
+  else if (off.length === 1 && WITHOUT[off[0].id]) name = WITHOUT[off[0].id];
+  else if (on.length === 1) name = on[0].label.toLocaleLowerCase('tr');
+  else name = `${on.length} kanal`;
+  return { eff, on, off, name };
+}
+
+/* Olculen katsayilar: kanal basina dakikada ~0.4 sn cozme, dakikada
+   ~1.05 sn mp3 yazma. Dylan sarkisinda 5 kanal icin 11.3 sn tahmin
+   ediyor, gercekte 11.4 sn surmustu. */
+function mixEstimate(count) {
+  const dk = (P.duration || 0) / 60;
+  return Math.max(2, Math.round(0.4 * count * dk + 1.05 * dk));
+}
+
+function updateMixLabel() {
+  const btn = $('#btn-mixdl');
+  if (!btn || btn.classList.contains('busy')) return;
+  const { on, name } = mixPlan();
+  btn.disabled = !P.song || !on.length;
+  btn.textContent = name === null ? '⤓ indirilecek kanal yok'
+    : name === 'miks' ? '⤓ miksi indir'
+    : `⤓ ${name} indir`;
+}
+
+async function downloadMix() {
+  const btn = $('#btn-mixdl');
+  const note = $('#mixdl-note');
+  const plan = mixPlan();
+  if (!P.song || !plan.on.length) return;
+
+  const est = mixEstimate(plan.on.length);
+  const t0 = Date.now();
+  btn.classList.add('busy');
+  btn.disabled = true;
+  note.textContent = '';
+  note.classList.remove('warn');
+  note.title = '';
+  btn.textContent = `⤓ hazırlanıyor… ~${est} sn`;
+  // Tahmin tutmazsa geri saymayi birakip gecen sureyi gosterir; boylece
+  // yavas bir makinede donmus gibi gorunmez.
+  const tick = setInterval(() => {
+    const gecen = Math.round((Date.now() - t0) / 1000);
+    btn.textContent = gecen < est
+      ? `⤓ hazırlanıyor… ~${est - gecen} sn`
+      : `⤓ hazırlanıyor… ${gecen} sn`;
+  }, 250);
+
+  try {
+    const q = STEMS.map((s) => `${s.id}:${plan.eff[s.id].toFixed(3)}`).join(',');
+    const res = await fetch(`/api/songs/${P.song.id}/mix.mp3?g=${encodeURIComponent(q)}`);
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      throw new Error(j && j.detail ? j.detail : 'sunucu ' + res.status);
+    }
+    const atten = parseFloat(res.headers.get('X-Mix-Atten-Db') || '0');
+    const blob = await res.blob();
+    const base = safeName(P.song.title || P.song.file.replace(/\.[^.]+$/, ''));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${base} - ${plan.name}.mp3`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 20000);
+    if (atten < -0.05) {
+      note.textContent = atten.toFixed(1).replace('.', ',') + ' dB';
+      note.classList.add('warn');
+      note.title = 'Kanallarin toplami 0 dB\'i astigi icin miks bu kadar kisildi';
+    }
+  } catch (e) {
+    note.textContent = 'olmadı';
+    note.classList.add('warn');
+    note.title = String((e && e.message) || e);
+  } finally {
+    clearInterval(tick);
+    btn.classList.remove('busy');
+    updateMixLabel();
   }
 }
 
@@ -1388,6 +1504,9 @@ function initControls() {
   $('#master').oninput = (e) => {
     if (P.master) P.master.gain.value = parseFloat(e.target.value);
   };
+
+  $('#btn-mixdl').onclick = downloadMix;
+  updateMixLabel();
 
   $('#rate').oninput = (e) => setRate(parseFloat(e.target.value));
   $('#btn-rate-reset').onclick = () => setRate(1);
