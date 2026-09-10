@@ -27,6 +27,24 @@ STATIC = paths.bundle_dir() / "app" / "static"
 app = FastAPI(title="GgMix")
 
 
+@app.middleware("http")
+async def always_revalidate(request, call_next):
+    """Tarayici her istekte sunucuya sorsun.
+
+    Hicbir cache-control basligi gonderilmiyordu; tarayici bu durumda
+    kendi sezgisel kuralini uyguluyor ve dosyayi sormadan onbellekten
+    veriyor. Sonuc: kod degistikten sonra sayfa yenilense bile eski
+    surum aciliyor (logo eklendiginde bu yasandi).
+
+    "no-cache" dosyayi onbelleklemeyi yasaklamiyor, sadece kullanmadan
+    once dogrulamayi zorunlu kiliyor. ETag zaten var, degismemisse 304
+    donuyor - lokal uygulamada maliyeti yok.
+    """
+    resp = await call_next(request)
+    resp.headers.setdefault("Cache-Control", "no-cache")
+    return resp
+
+
 # --------------------------------------------------------------------- model
 
 def song_id(path: Path) -> str:
