@@ -121,7 +121,7 @@ def metadata(path: Path) -> dict:
 
 def describe(sid: str, path: Path, can_tr: bool | None = None) -> dict:
     # can_tr istek basina bir kez hesaplanip gecilir; sarkiya bagli degil
-    # (sadece .venv-transcribe ve bp_worker.py varligina bakiyor)
+    # (sadece onnxruntime ve modelin varligina bakiyor)
     if can_tr is None:
         can_tr = transcribe.available()
     out = STEMS / path.stem
@@ -252,7 +252,7 @@ def start_transcribe(sid: str, stem: str = "gitar"):
     if stem not in transcribe.TRANSCRIBABLE:
         raise HTTPException(400, f"bu kanal icin nota cikarilmaz: {stem}")
     if not transcribe.available():
-        raise HTTPException(503, ".venv-transcribe kurulu degil")
+        raise HTTPException(503, "nota cikarma modeli bulunamadi")
     folder = STEMS / lib[sid].stem
     if not (folder / f"{stem}.mp3").exists():
         raise HTTPException(409, "once kanallara ayrilmali")

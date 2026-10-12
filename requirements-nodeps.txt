@@ -1,0 +1,8 @@
+# --no-deps ile kurulur:
+#   .venv\Scripts\python.exe -m pip install --no-deps -r requirements-nodeps.txt
+#
+# basic-pitch'in meta verisi Windows + Python 3.11'de tensorflow istiyor;
+# normal kurulum TensorFlow'u (1.8 GB) ceker ve numpy'yi 1.26'ya dusurup
+# torch/demucs'u bozar. Biz ONNX modelini onnxruntime ile kullaniyoruz;
+# gercekten gereken bagimliliklar requirements.txt'te sabitli.
+basic-pitch==0.4.0

@@ -1,27 +1,25 @@
 """Nota transkripsiyonu: izole kanaldan MIDI nota dizisi.
 
-basic-pitch ANA venv'e giremiyor - TensorFlow cekiyor ve numpy'yi 1.26'ya
-dusuruyor, bu da torch/demucs kurulumunu bozar. Bu yuzden `.venv-transcribe`
-adinda ayri bir ortamda, alt surec olarak calisiyor.
+basic-pitch'in ONNX modeli ana surecte calisiyor. Eskiden TensorFlow ile
+ayri bir `.venv-transcribe` ortaminda alt surec olarak kosuyordu (1.8 GB,
+pakete giremiyordu, her makinede elle kurulmasi gerekiyordu). ONNX ciktisi
+TF ile birebir ayni - Whitesnake gitar kanalinda 1713/1713 nota, ayni
+baslangic ve perde (olculdu) - ve onnxruntime ~40 MB.
 
-Maliyet: 6:39'luk bir kanalda ~12 sn cikarim + ~30 sn TensorFlow acilisi.
-Acilis her cagrida odeniyor, bu yuzden sonuc onbelleklenir.
+basic-pitch `--no-deps` ile kurulu: paket meta verisi Windows/py3.11'de
+tensorflow istiyor ve numpy'yi 1.26'ya dusurup torch'u bozuyor. Kodun
+ihtiyac duydugu bagimliliklar requirements.txt'te ayrica sabitli.
+
+Maliyet: 6:39'luk bir kanalda ~40 sn (ses cozme dahil). Sonuc onbelleklenir.
 """
 from __future__ import annotations
 
+import functools
 import json
-import subprocess
-import sys
+import logging
+import time
 from pathlib import Path
 
-from .paths import bundle_dir, data_dir
-
-# Transkripsiyon ortami pakete girmiyor (TensorFlow tek basina 1.8 GB).
-# Isteyen exe'nin yanina kendisi kurar - bu yuzden data_dir.
-ROOT = data_dir()
-VENV_PY = ROOT / ".venv-transcribe" / "Scripts" / "python.exe"
-# Isci script'i paketin parcasi
-WORKER = bundle_dir() / "tools" / "bp_worker.py"
 CACHE_VERSION = 1
 
 # Davul perdesiz; nota cikarmak anlamsiz olurdu
@@ -33,8 +31,51 @@ NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 STRINGS = [("E", 40), ("A", 45), ("D", 50), ("G", 55), ("B", 59), ("e", 64)]
 
 
+# Kanal basina frekans siniri. Aralik daraltmak, ayirmadan sizan
+# bilesenleri (gitar kanalindaki bas dibi, zil tepesi gibi) eliyor.
+BOUNDS = {
+    "gitar":  (80.0, 1350.0),    # E2 - ~E6
+    "bas":    (30.0, 400.0),     # B0 - ~G4
+    "vokal":  (80.0, 1200.0),
+    "piyano": (27.5, 4200.0),    # A0 - C8
+    "diger":  (55.0, 2100.0),
+}
+
+# General MIDI program numaralari. basic-pitch her seye varsayilan olarak
+# 4 (Electric Piano 1) yaziyor; gitar partisini piyanoyla dinlemek notalari
+# takip etmeyi zorlastiriyor. Gitar icin bilerek TEMIZ ton secildi -
+# distortion'li sesler MIDI sentezinde notalari birbirine karistiriyor.
+PROGRAMS = {
+    "gitar":  27,   # Electric Guitar (clean)
+    "bas":    33,   # Electric Bass (finger)
+    "vokal":  53,   # Voice Oohs
+    "piyano":  0,   # Acoustic Grand Piano
+    "diger":   4,   # Electric Piano 1
+}
+
+
+def _model():
+    """ONNX model yolu. basic-pitch yuklu ama onnxruntime yoksa TF/CoreML
+    yoluna dusmesin diye acikca .onnx istiyoruz."""
+    # basic-pitch import aninda kurulu olmayan her arka uc (TF, CoreML,
+    # TFLite) icin uyari basiyor; ONNX kullandigimiz icin hepsi gurultu
+    root = logging.getLogger()
+    level = root.level
+    root.setLevel(logging.ERROR)
+    try:
+        from basic_pitch import FilenameSuffix, build_icassp_2022_model_path
+    finally:
+        root.setLevel(level)
+    return build_icassp_2022_model_path(FilenameSuffix.onnx)
+
+
+@functools.lru_cache(maxsize=1)
 def available() -> bool:
-    return VENV_PY.exists() and WORKER.exists()
+    try:
+        import onnxruntime  # noqa: F401
+        return _model().exists()
+    except Exception:
+        return False
 
 
 def note_name(p: int) -> str:
@@ -88,29 +129,47 @@ def enrich(d: dict) -> dict:
     return d
 
 
-def transcribe(folder: Path, stem: str, timeout: int = 900) -> dict:
+def transcribe(folder: Path, stem: str) -> dict:
     """Kanali nota dizisine cevir. Agir islem - cagiran cache'lemeli."""
     if stem not in TRANSCRIBABLE:
         raise ValueError(f"bu kanal icin nota cikarilmaz: {stem}")
     if not available():
-        raise RuntimeError(
-            ".venv-transcribe bulunamadi. Kurmak icin:\n"
-            "  python -m venv .venv-transcribe\n"
-            "  .venv-transcribe\\Scripts\\python.exe -m pip install basic-pitch")
+        raise RuntimeError("nota cikarma modeli (onnxruntime) bulunamadi")
 
     src = folder / f"{stem}.mp3"
     if not src.exists():
         raise FileNotFoundError(f"kanal yok: {src}")
 
-    proc = subprocess.run(
-        [str(VENV_PY), str(WORKER), str(src),
-         str(json_path(folder, stem)), str(midi_path(folder, stem)), stem],
-        capture_output=True, text=True, timeout=timeout,
-        cwd=str(ROOT),
+    from basic_pitch.inference import predict
+
+    lo, hi = BOUNDS.get(stem, (55.0, 2100.0))
+    t0 = time.time()
+    _, midi, notes = predict(
+        str(src),
+        _model(),
+        onset_threshold=0.6,
+        frame_threshold=0.4,
+        minimum_note_length=70,     # ms - kisa hayalet notalari at
+        minimum_frequency=lo,
+        maximum_frequency=hi,
     )
-    if proc.returncode != 0:
-        tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-4:]
-        raise RuntimeError("basic-pitch basarisiz:\n" + "\n".join(tail))
+    for inst in midi.instruments:
+        inst.program = PROGRAMS.get(stem, 0)
+        inst.name = stem
+    midi.write(str(midi_path(folder, stem)))
+
+    rows = [
+        [round(float(s), 3), round(float(e), 3), int(p), round(float(a), 3)]
+        for s, e, p, a, _ in sorted(notes, key=lambda n: n[0])
+    ]
+    json_path(folder, stem).write_text(json.dumps({
+        "version": CACHE_VERSION,
+        "stem": stem,
+        "count": len(rows),
+        "range_hz": [lo, hi],
+        "took": round(time.time() - t0, 1),
+        "notes": rows,
+    }), encoding="utf-8")
 
     d = load_cached(folder, stem)
     if d is None:

@@ -349,7 +349,8 @@ app\
   main.py         FastAPI: kitaplık, iş kuyruğu API'si, ses servisi
   separator.py    Demucs motoru — tek işçi thread'li kuyruk, ilerleme takibi
   analysis.py     Ton / gam / tempo / akor analizi (librosa)
-  transcribe.py   Nota çıkarma — ayrı venv'de alt süreç olarak çalışır
+  transcribe.py   Nota çıkarma — basic-pitch ONNX modeli, ana süreçte
+  tray.py         Sistem tepsisi ikonu (saf ctypes)
   static\         Arayüz (saf JS + Web Audio API)
     vendor\       signalsmith-stretch (MIT) — bkz. vendor\NOTICE.md
 songs\            Kaynak müzik dosyaların
@@ -358,29 +359,25 @@ tools\
   separate_test.py   Komut satırından ayırma
   analyze_stems.py   Kanalların enerji analizi
   analyze_music.py   Ton, gam, tempo, akor tespiti (miks/kanal karşılaştırmalı)
-  bp_worker.py       basic-pitch işçisi (.venv-transcribe içinde koşar)
+  make_icon.py       Logodan exe/tepsi ikonu (app\static\icon.ico)
 ```
 
-### İki ayrı Python ortamı
+### Tek Python ortamı
 
-`basic-pitch` TensorFlow çekiyor ve numpy'yi 1.26'ya düşürüyor — bu da ana
-ortamdaki torch/demucs kurulumunu bozar. Bu yüzden ayrı tutuluyor:
+Nota çıkarma eskiden TensorFlow ile ayrı bir `.venv-transcribe` ortamında,
+alt süreç olarak çalışıyordu: basic-pitch'in TF bağımlılığı numpy'yi 1.26'ya
+düşürüp torch/demucs'u bozuyordu. Bu yüzden pakete giremiyordu ve her
+bilgisayarda elle kurulması gerekiyordu. Kurulmayan makinede akor rozeti
+boş kalıyordu.
 
-| Ortam | İçerik | Kullanım |
-|---|---|---|
-| `.venv` | torch, demucs, librosa, fastapi | Uygulama ve ayırma |
-| `.venv-transcribe` | tensorflow, basic-pitch | Sadece nota çıkarma, alt süreç |
+Artık basic-pitch'in kendi ONNX modeli (`nmp.onnx`) onnxruntime ile ana
+süreçte çalışıyor. Çıktı TF ile birebir aynı: Whitesnake gitar kanalında
+1713/1713 nota, aynı başlangıç ve perde (ölçüldü). basic-pitch `--no-deps`
+ile kurulu (bkz. *Kaynaktan kurmak*). Bir avantajı daha var: TensorFlow'un
+her çağrıda ödenen ~30 sn açılış süresi yok.
 
-Nota çıkarma ortamını kurmak (isteğe bağlı — yoksa panel bunu söyler):
-
-```
-python -m venv .venv-transcribe
-.venv-transcribe\Scripts\python.exe -m pip install -r requirements-transcribe.txt
-```
-
-İki ortamın da paket listesi sabitlenmiş: `requirements.txt` ve
-`requirements-transcribe.txt`. Tek `.exe` paketleme bu kayıtlar olmadan
-tekrarlanabilir olmaz.
+Paket listesi sabitlenmiş: `requirements.txt` ve `requirements-nodeps.txt`.
+`.venv-transcribe` artık kullanılmıyor, silinebilir.
 
 ### Ses motoru
 
@@ -425,8 +422,8 @@ akor yokken gizlenmez, boşalır.
 .venv\Scripts\python.exe build.py
 ```
 
-Çıktı: `dist\GgMix\` klasörü (~864 MB) ve `dist\GgMix-portable.zip`
-(~392 MB). ZIP'i hedef bilgisayarda aç, `GgMix.exe`'ye çift tıkla.
+Çıktı: `dist\GgMix\` klasörü (~917 MB) ve `dist\GgMix-portable.zip`
+(~416 MB). ZIP'i hedef bilgisayarda aç, `GgMix.exe`'ye çift tıkla.
 Python, yönetici hakkı ve internet gerekmez.
 
 Paketle ilgili kararlar:
@@ -435,17 +432,18 @@ Paketle ilgili kararlar:
 |---|---|
 | `--onedir`, `--onefile` değil | İçinde torch var (541 MB); onefile her açılışta bunu geçici klasöre açar, açılış 20–60 sn sürer |
 | Demucs modelleri gömülü (133 MB) | Yoksa ilk ayırmada internet ister; "kurduğum her bilgisayarda çalışsın" hedefi tutmaz |
-| TensorFlow / basic-pitch **yok** | Tek başına 1.8 GB. Nota çıkarma isteğe bağlı ve kod yokluğunu düzgün karşılıyor |
+| Nota çıkarma **gömülü** (ONNX) | basic-pitch'in ONNX modeli + onnxruntime ~40 MB; TensorFlow (1.8 GB) gerekmiyor |
+| `--windowed` | Siyah konsol penceresi yok; uygulama sistem tepsisinde durur, çıktı `GgMix.log`'a |
+| Logodan ikon + sürüm bilgisi | Exe, tepsi ve Görev Yöneticisi'nde Python amblemi yerine GgMix logosu ve adı |
 | ffmpeg **yok** | Gerekmiyor — demucs mp3'ü `sphn` ile çözüyor (ölçüldü) |
 
 Veriler `songs\` ve `stems\` klasörlerinde, exe'nin yanında durur. Klasörün
 tamamını kopyalarsan şarkılar, ayrılmış kanallar ve analizler birlikte taşınır.
 
-Nota çıkarmayı sonradan eklemek istersen paket klasöründe:
+İkon logodan üretiliyor (`logo.jfif` değişirse yeniden çalıştır):
 
 ```
-python -m venv .venv-transcribe
-.venv-transcribe\Scripts\python.exe -m pip install -r requirements-transcribe.txt
+.venv\Scripts\python.exe tools\make_icon.py
 ```
 
 ### Başlatıcı
@@ -457,6 +455,12 @@ yerine geçiyor:
 - Uygulama zaten çalışıyorsa ikinci sunucu başlatmaz, sadece sekmeyi açar
 - 8000'i başka bir program tutuyorsa `/api/health` ile bunu anlar ve
   sonraki portu dener — alakasız bir sayfaya götürmez
+- Sistem tepsisine ikon koyar (`app/tray.py`, saf ctypes): üstüne gelince o
+  anki iş ve yüzdesi, iş bitince bildirim balonu; sol tık tarayıcıyı açar,
+  sağ tık menüsünde Aç / Şarkı klasörü / Çıkış. Sunucu yan thread'de, tepsi
+  ana thread'de — Win32 mesaj döngüsü pencereyi yaratan thread'e bağlı.
+- Konsol yoksa (paketlenmiş sürüm) `stdout`/`stderr`'i `GgMix.log`'a bağlar;
+  başlatma hatasını mesaj kutusuyla gösterir
 
 Geliştirmede de çalışır: `.venv\Scripts\python.exe launcher.py`
 
@@ -474,7 +478,12 @@ Geliştirmede de çalışır: `.venv\Scripts\python.exe launcher.py`
 ```
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m pip install --no-deps -r requirements-nodeps.txt
 ```
+
+İkinci satır `--no-deps` olmak zorunda: basic-pitch'in meta verisi
+TensorFlow istiyor ve numpy'yi 1.26'ya düşürüp torch'u bozuyor. Biz ONNX
+modelini kullanıyoruz; gereken bağımlılıklar `requirements.txt`'te.
 
 PyTorch'un işlemci sürümü gerekiyorsa:
 `pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu`

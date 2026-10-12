@@ -102,15 +102,30 @@ PyInstaller to build and distribute non-free programs (including commercial
 ones)"*. Üretilen pakete hiçbir yükümlülük binmiyor. Otomatik lisans
 taramaları bunu copyleft diye işaretler — yanlış alarm.
 
-### İsteğe bağlı ortam (pakete girmiyor)
+### Nota çıkarma (pakete gömülü)
 
-`.venv-transcribe` içindeki nota çıkarma ortamı ayrı tutuluyor ve pakete
-dahil edilmiyor:
+Eskiden TensorFlow ile ayrı bir `.venv-transcribe` ortamındaydı ve pakete
+girmiyordu. Artık basic-pitch'in ONNX modeli onnxruntime ile ana süreçte
+çalışıyor; TensorFlow hiç kurulmuyor.
 
-| Bileşen | Lisans |
-|---|---|
-| basic-pitch | Apache-2.0 (Spotify) |
-| TensorFlow | Apache-2.0 |
+| Bileşen | Lisans | Ne için |
+|---|---|---|
+| basic-pitch 0.4.0 + ICASSP 2022 modeli | Apache-2.0 (Spotify) | Nota transkripsiyonu |
+| onnxruntime | MIT (Microsoft) | Modeli çalıştırma |
+| pretty_midi, mido | MIT | MIDI yazma |
+| mir_eval | MIT | basic-pitch'in bağımlılığı |
+| resampy | ISC | Yeniden örnekleme |
+| protobuf | BSD-3 | onnxruntime'ın bağımlılığı |
+| flatbuffers | Apache-2.0 | onnxruntime'ın bağımlılığı |
+
+### Tepsi ikonu
+
+`app/tray.py` saf ctypes (Win32 API). `pystray` bilerek kullanılmadı:
+LGPL-3.0, ve PyInstaller'ın PYZ arşivinde Python modülü olarak gömülünce
+"kullanıcı kütüphaneyi değiştirebilmeli" şartını sağlamak zahmetli.
+
+Pillow (MIT-CMU) yalnızca `tools/make_icon.py` için, derleme zamanında
+kullanılıyor; `build.py` onu paketten dışlıyor.
 
 ---
 

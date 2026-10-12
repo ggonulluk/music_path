@@ -59,6 +59,7 @@ class Job:
     def as_dict(self) -> dict:
         d = {
             "song_id": self.song_id,
+            "song": self.src.stem,      # tepsi bildirimi icin okunur ad
             "kind": self.kind,
             "stem": self.stem,
             "state": self.state,
@@ -179,7 +180,7 @@ class SeparationQueue:
 
     def _transcribe(self, job: Job) -> None:
         from . import transcribe as tr
-        # basic-pitch alt surecte kendi ilerlemesini bildirmiyor; asamayi
+        # basic-pitch kendi ilerlemesini bildirmiyor; asamayi
         # yaziyoruz ki kullanici neyin surdugunu bilsin
         job.stage = f"{job.stem} kanalından notalar çıkarılıyor"
         job.progress = 0.15

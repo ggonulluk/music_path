@@ -1177,8 +1177,7 @@ async function loadNotes(song, stem) {
   } else if (job && job.state === 'error') {
     el.innerHTML = '<span>Nota çıkarma başarısız oldu.</span>';
   } else if (body.available === false) {
-    el.innerHTML = '<span>Nota çıkarma ortamı kurulu değil ' +
-                   '(<code>.venv-transcribe</code>).</span>';
+    el.innerHTML = '<span>Nota çıkarma modeli bulunamadı (onnxruntime).</span>';
   } else {
     el.innerHTML = `<span>Bu kanalın notaları henüz çıkarılmadı.</span>
       <button class="btn sec" id="btn-transcribe">Notaları çıkar</button>`;
