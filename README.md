@@ -231,13 +231,25 @@ Kitaplığın üstündeki alana bağlantı yapıştır, **İndir**'e bas. `yt-dl
 sesi indirir, ffmpeg mp3'e çevirir, dosya `songs\` klasörüne düşer.
 
 **Neden mp3'e çeviriyoruz?** Ayırma motoru sesi `sphn` ile okuyor ve sphn
-m4a/webm/opus çözemiyor (ölçüldü). demucs ffmpeg'e düşüyor ama paketlenmiş
-sürümde ffmpeg bulunmuyor. İndirme sırasında çevirince ffmpeg yalnızca bu
-özellik için gerekli oluyor, çekirdek boru hattı ona bağımlı kalmıyor.
+m4a/webm/opus çözemiyor (ölçüldü). İndirme sırasında çevirince ffmpeg
+yalnızca bu özellik için gerekli oluyor, çekirdek boru hattı ona bağımlı
+kalmıyor.
 
-**Bakım notu:** `yt-dlp` sık güncelleme ister çünkü siteler iç yapılarını
-değiştiriyor. Paketlenmiş sürümde gömülü kalan bir `yt-dlp` birkaç ay sonra
-çalışmayabilir.
+**ffmpeg:** Taşınabilir paket onu exe'nin yanındaki `ffmpeg\` klasöründe
+getiriyor (LGPL derlemesi). Klasör yoksa sistemdeki ffmpeg'e (PATH, winget)
+bakılır; o da yoksa ilk indirmede aynı derleme `ffmpeg\` klasörüne indirilir.
+
+**yt-dlp kendini güncel tutar:** Siteler iç yapılarını sık değiştirdiği için
+gömülü bir `yt-dlp` birkaç ay sonra çalışmayabilir. `app/updater.py`:
+
+- açılışta, son kontrolden 24 saat geçtiyse PyPI'da yeni sürüme bakar;
+- bir indirme **başarısız olunca** hemen bakar, yeni sürüm varsa kurar ve
+  indirmeyi bir kez daha dener;
+- arayüzdeki **güncelle** bağlantısıyla elle de bakılır.
+
+Yeni sürüm `yt-dlp\<sürüm>\` klasörüne açılır ve gömülü olanın yerine
+yüklenir (uygulama yeniden başlatılmadan). Yüklenemezse gömülüye dönülür.
+Başarılı/başarısız indirme kaydı `yt-dlp\state.json`'da.
 
 > YouTube'un kullanım şartları kendi sunduğu özellikler dışında indirmeyi
 > yasaklıyor. `yt-dlp`'nin kendisi meşru bir açık kaynak araç; kısıt aracın
@@ -435,7 +447,7 @@ Paketle ilgili kararlar:
 | Nota çıkarma **gömülü** (ONNX) | basic-pitch'in ONNX modeli + onnxruntime ~40 MB; TensorFlow (1.8 GB) gerekmiyor |
 | `--windowed` | Siyah konsol penceresi yok; uygulama sistem tepsisinde durur, çıktı `GgMix.log`'a |
 | Logodan ikon + sürüm bilgisi | Exe, tepsi ve Görev Yöneticisi'nde Python amblemi yerine GgMix logosu ve adı |
-| ffmpeg **yok** | Gerekmiyor — demucs mp3'ü `sphn` ile çözüyor (ölçüldü) |
+| ffmpeg `ffmpeg\` klasöründe (LGPL) | Yalnızca bağlantıdan indirmede mp3'e çevirmek için; ayırma ona bağlı değil. Derleme onu indirir, ya da `GGMIX_FFMPEG_DIR` ile verilir |
 
 Veriler `songs\` ve `stems\` klasörlerinde, exe'nin yanında durur. Klasörün
 tamamını kopyalarsan şarkılar, ayrılmış kanallar ve analizler birlikte taşınır.

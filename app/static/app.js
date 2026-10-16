@@ -186,12 +186,25 @@ async function refreshSources() {
   url.disabled = !d.fetch.available;
   if (!d.fetch.available) parts.push(`<span class="warn">İndirme kapalı: ${d.fetch.reason}</span>`);
   else if (d.fetch.state === 'running') {
-    parts.push(`İndiriliyor… ${Math.round(d.fetch.progress * 100)}%` +
+    parts.push(`${d.fetch.note || 'İndiriliyor'}… ${Math.round(d.fetch.progress * 100)}%` +
       `<div class="src-prog"><i style="width:${d.fetch.progress * 100}%"></i></div>`);
   } else if (d.fetch.state === 'error') {
     parts.push(`<span class="warn">İndirme başarısız: ${d.fetch.error || ''}</span>`);
   } else if (d.fetch.state === 'done' && d.fetch.file) {
     parts.push(`İndirildi: <b>${d.fetch.file}</b>`);
+  }
+  // yt-dlp surumu ve guncelleme durumu
+  const y = d.fetch.ytdlp;
+  const yBusy = !!y && (y.state === 'checking' || y.state === 'updating');
+  if (y && y.version) {
+    const when = y.checked ? new Date(y.checked * 1000).toLocaleString() : 'hiç';
+    let s = `<span title="Son kontrol: ${when}">yt-dlp ${y.version}</span>`;
+    if (yBusy) s += ` — ${y.state === 'updating' ? 'güncelleniyor' : 'kontrol ediliyor'}…`;
+    else if (y.state === 'error') s += ` <span class="warn">${y.message}</span>`;
+    else if (y.message) s += ` — ${y.message}`;
+    if (!yBusy && d.fetch.state !== 'running') s += ` <a href="#" id="src-upd">güncelle</a>`;
+    if (!d.fetch.ffmpeg) s += ' · ffmpeg ilk indirmede kurulacak';
+    parts.push(s);
   }
 
   btnR.disabled = !d.record.available;
@@ -205,6 +218,12 @@ async function refreshSources() {
   else if (d.record.state === 'done' && d.record.file) parts.push(`Kaydedildi: <b>${d.record.file}</b>`);
 
   info.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+  const upd = $('#src-upd');
+  if (upd) upd.onclick = async (e) => {
+    e.preventDefault();
+    await fetch('/api/fetch/update', { method: 'POST' });
+    refreshSources();
+  };
 
   // Is bittiginde kutuphaneyi bir kez tazele
   const busy = d.fetch.state === 'running' || SRC.recording;
@@ -212,7 +231,7 @@ async function refreshSources() {
   SRC.wasBusy = busy;
 
   clearTimeout(SRC.poll);
-  if (busy) SRC.poll = setTimeout(refreshSources, 700);
+  if (busy || yBusy) SRC.poll = setTimeout(refreshSources, 700);
 }
 
 function initSources() {
