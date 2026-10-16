@@ -1175,7 +1175,10 @@ async function loadNotes(song, stem) {
     el.innerHTML = `<span>${job.stage || 'sırada'}…</span>`;
     N.poll = setTimeout(() => loadNotes(song, stem), 2500);
   } else if (job && job.state === 'error') {
-    el.innerHTML = '<span>Nota çıkarma başarısız oldu.</span>';
+    // traceback'in son satiri asil hata
+    const why = (job.error || '').trim().split('\n').pop();
+    el.innerHTML = '<span></span>';
+    el.firstChild.textContent = `Nota çıkarma başarısız oldu${why ? ': ' + why : '.'}`;
   } else if (body.available === false) {
     el.innerHTML = '<span>Nota çıkarma modeli bulunamadı (onnxruntime).</span>';
   } else {
