@@ -1,7 +1,8 @@
 """GgMix sunucusu - sarkilari enstruman kanallarina ayiran yerel arac.
 
-Tamamen lokal calisir (127.0.0.1). Disariya hicbir istek gitmez,
-muzik dosyalari hicbir yere yuklenmez.
+Tamamen lokal calisir (127.0.0.1). Muzik dosyalari hicbir yere yuklenmez.
+Disariya giden istekler yalnizca baglantidan indirme ozelliginin:
+indirilen site, yt-dlp surum kontrolu (PyPI) ve gerekirse ffmpeg (GitHub).
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ from starlette.background import BackgroundTask
 # ayni dakikayi veriyor, oynatici sureyi zaten cozulmus sesten aliyor).
 from tinytag import TinyTag
 
-from . import analysis, fetch, library, mixdown, paths, record, transcribe
+from . import analysis, fetch, library, mixdown, paths, record, transcribe, updater
 from .separator import QUEUE, SONGS, STEMS, STEM_ORDER
 
 AUDIO_EXT = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus", ".aac", ".wma"}
@@ -334,7 +335,9 @@ def sources():
     r_ok, r_why = record.available()
     dev = record.loopback_device() if r_ok else None
     return {
-        "fetch": {"available": f_ok, "reason": f_why, **fetch.FETCHER.as_dict()},
+        "fetch": {"available": f_ok, "reason": f_why, **fetch.FETCHER.as_dict(),
+                  "ffmpeg": bool(updater.ffmpeg_path()),
+                  "ytdlp": updater.YTDLP.as_dict()},
         "record": {"available": r_ok, "reason": r_why,
                    "device": dev["name"] if dev else None,
                    **record.RECORDER.as_dict()},
@@ -349,6 +352,18 @@ def start_fetch(url: str):
     if not ok:
         raise HTTPException(503, why)
     return fetch.FETCHER.start(url, SONGS)
+
+
+@app.post("/api/fetch/update")
+def ytdlp_update():
+    """yt-dlp'nin yeni surumunu hemen ara (arka planda); durum /api/sources'ta."""
+    updater.YTDLP.check_async(force=True)
+    return updater.YTDLP.as_dict()
+
+
+# Son bakistan 24 saat gectiyse yt-dlp'nin yeni surumunu ara; arka planda,
+# acilisi bekletmez
+updater.YTDLP.check_async()
 
 
 @app.post("/api/record/start")

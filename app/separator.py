@@ -77,15 +77,29 @@ class Job:
 
 
 class SeparationQueue:
-    """Arka planda tek isci ile calisan ayirma kuyrugu."""
+    """Arka planda calisan is kuyrugu: ayirma icin bir isci, kisa isler icin bir isci.
+
+    Nota cikarma (15-40 sn) ve analiz eskiden ayirmalarla (sarki basina
+    ~8 dk) ayni sirada bekliyordu; iki sarki sirada iken "Notalari cikar"
+    15+ dk "sirada" kalip bozuk gibi gorunuyordu. Kisa isler artik kendi
+    iscisinde, ayirma surerken de hemen basliyor. Iki ayirma yine ayni anda
+    calismiyor (RAM).
+    """
+
+    LIGHT = ("transcribe", "analyze")
 
     def __init__(self) -> None:
         self._q: "queue.Queue[Job]" = queue.Queue()
+        self._light: "queue.Queue[Job]" = queue.Queue()
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
         self._models: dict[str, Separator] = {}
-        self._worker = threading.Thread(target=self._run, daemon=True, name="separator")
+        self._worker = threading.Thread(target=self._run, args=(self._q,),
+                                        daemon=True, name="separator")
         self._worker.start()
+        self._light_worker = threading.Thread(target=self._run, args=(self._light,),
+                                              daemon=True, name="light-jobs")
+        self._light_worker.start()
 
     # ---------------------------------------------------------------- public
 
@@ -103,7 +117,7 @@ class SeparationQueue:
             job = Job(song_id=song_id, src=src, dest=dest, mode=mode,
                       kind=kind, stem=stem)
             self._jobs[key] = job
-        self._q.put(job)
+        (self._light if kind in self.LIGHT else self._q).put(job)
         return job
 
     def get(self, song_id: str, kind: str = "separate", stem: str = "") -> Optional[Job]:
@@ -139,9 +153,9 @@ class SeparationQueue:
             for k, _ in done[: len(done) - KEEP_FINISHED]:
                 self._jobs.pop(k, None)
 
-    def _run(self) -> None:
+    def _run(self, q: "queue.Queue[Job]") -> None:
         while True:
-            job = self._q.get()
+            job = q.get()
             try:
                 self._process(job)
             except Exception:
@@ -150,7 +164,7 @@ class SeparationQueue:
                 job.finished_at = time.time()
             finally:
                 self._prune()
-                self._q.task_done()
+                q.task_done()
 
     def _process(self, job: Job) -> None:
         job.state = "running"

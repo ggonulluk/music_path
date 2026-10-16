@@ -28,15 +28,30 @@ dosyalar olarak durduğu için bu şart doğal olarak sağlanıyor.
 > Not: `--onedir` zaten başka bir sebeple de doğru tercih — paketin içinde
 > torch var (541 MB) ve `--onefile` her açılışta bunu geçici klasöre açardı.
 
-### 2. ffmpeg ikilisi pakete konmamalı
+### 2. Pakete giren ffmpeg LGPL derlemesi olmalı, GPL değil
 
-Kurulu olan `Gyan.FFmpeg full_build` bir **GPL** derlemesi. Uygulama onu
-**harici program olarak** çağırıyor (`app/fetch.py` → `yt-dlp`'nin
-`ffmpeg_location` ayarı); bu "kol mesafesinde" sayılır, bulaşma yok.
-Pakete gömülürse durum değişir. Gerekirse LGPL derlemesi kullanılmalı.
+`build.py` ffmpeg'i exe'nin yanındaki `ffmpeg\` klasörüne koyuyor; paket
+olmadan çalışan kopya da ilk indirmede aynısını oraya indiriyor
+(`app/updater.py` → `install_ffmpeg`). Kaynak: BtbN/FFmpeg-Builds'in
+**`lgpl-shared`** derlemesi (kararlı dal). `--enable-version3` ile
+derlendiği için LGPL-3.0; GPL bileşenleri (x264, x265...) içermiyor, mp3
+için gereken `libmp3lame` LGPL ve içinde.
 
-`build.py` şu an ffmpeg'i **paketlemiyor** — indirme özelliği kullanıcının
-sisteminde ffmpeg arıyor, yoksa düğme kapalı kalıyor.
+Neden önemli: GPL derlemesi (ör. `Gyan.FFmpeg full_build`) sistemde
+kuruluyken uygulama onu harici program olarak çağırırsa sorun yok, ama
+**pakete gömülüp dağıtılırsa** GPL yükümlülüğü doğar. `GGMIX_FFMPEG_DIR`
+ile derlemeye kendi ffmpeg'inizi verirken buna dikkat edin.
+
+LGPL şartları: ffmpeg ayrı program, DLL'ler `ffmpeg\` içinde ayrı dosyalar
+— kullanıcı değiştirebilir. Klasörde `LICENSE.txt` ve kaynak adresini
+veren `KAYNAK.txt` duruyor.
+
+### 3. yt-dlp kendini veri klasörüne günceller
+
+`app/updater.py` PyPI'daki resmi `yt_dlp-*-py3-none-any.whl` dosyasını
+indirir (sha256 PyPI'dan doğrulanır) ve `yt-dlp\<sürüm>\` altına açar.
+yt-dlp Unlicense (kamu malı), yükümlülük yok. Yeni sürüm yüklenemezse
+gömülü sürüme dönülür.
 
 ---
 
@@ -78,6 +93,7 @@ taşıyor — ileride bir kurulum onu geri getirirse pakete girmesin diye.
 |---|---|
 | lameenc | LGPL-3.0-or-later |
 | soxr | LGPL-2.1-or-later |
+| FFmpeg (`ffmpeg\`, BtbN lgpl-shared derlemesi) | LGPL-3.0-or-later |
 
 ### Dosya bazlı copyleft — bildirimi taşımak yeterli
 

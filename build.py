@@ -122,6 +122,8 @@ def run_pyinstaller(models: Path) -> None:
         # resampy'nin filtre katsayilari paket verisinde (.npz)
         "--collect-data=basic_pitch",
         "--collect-data=resampy",
+        # app/updater.py gomulu yt-dlp surumunu importlib.metadata'dan okuyor
+        "--copy-metadata=yt-dlp",
         # uvicorn protokollerini dinamik iceri aliyor
         "--hidden-import=uvicorn.protocols.http.h11_impl",
         "--hidden-import=uvicorn.protocols.websockets.auto",
@@ -149,6 +151,30 @@ def run_pyinstaller(models: Path) -> None:
     subprocess.run(args, check=True, cwd=ROOT)
 
 
+def stage_ffmpeg() -> Path:
+    """Baglantidan indirme icin ffmpeg (LGPL derlemesi) - exe'nin yanina.
+
+    GGMIX_FFMPEG_DIR verilmisse oradaki ffmpeg.exe/ffprobe.exe/DLL'ler
+    kullanilir (cevrimdisi derleme). Yoksa uygulamanin kendi indirdigi
+    derlemenin aynisi indirilir. GPL derlemesi VERMEYIN: bkz.
+    THIRD-PARTY-NOTICES.
+    """
+    dest = STAGE / "ffmpeg"
+    src = os.environ.get("GGMIX_FFMPEG_DIR")
+    if src:
+        shutil.copytree(src, dest, dirs_exist_ok=True)
+        if not (dest / "ffmpeg.exe").is_file():
+            sys.exit(f"GGMIX_FFMPEG_DIR icinde ffmpeg.exe yok: {src}")
+        print(f"  ffmpeg  {src}")
+    else:
+        sys.path.insert(0, str(ROOT))
+        from app import updater
+        print(f"  ffmpeg  {updater.install_ffmpeg(dest)}")
+    size = sum(f.stat().st_size for f in dest.rglob("*") if f.is_file())
+    print(f"  ffmpeg                                  {size / 1e6:7.1f} MB")
+    return dest
+
+
 def write_readme(out: Path) -> None:
     (out / "OKUBENI.txt").write_text(
         # Bitisik iki metin once birlesip sonra 40'la carpiliyordu:
@@ -170,7 +196,12 @@ def write_readme(out: Path) -> None:
         "  stems\\   ayrilmis kanallar, analiz ve nota dosyalari\n"
         "  Bu klasoru bir baska bilgisayara kopyalarsan her sey tasinir.\n\n"
         "INTERNET\n"
-        "  Gerekmiyor. Demucs modelleri pakete gomulu.\n\n"
+        "  Ayirma ve nota icin gerekmiyor. Demucs modelleri pakete gomulu.\n\n"
+        "BAGLANTIDAN INDIRME (YouTube vb.)\n"
+        "  ffmpeg pakete dahil (ffmpeg\\ klasoru, LGPL derlemesi).\n"
+        "  yt-dlp gunde bir kez ve her basarisiz indirmeden sonra yeni\n"
+        "  surumu kendisi arar, bulursa yt-dlp\\ klasorune kurar ve indirmeyi\n"
+        "  bir kez daha dener. Arayuzdeki 'guncelle' ile elle de bakilir.\n\n"
         "NOTA VE AKOR CIKARMA\n"
         "  Pakete dahil, ek kurulum gerekmez. Nota panelinde\n"
         "  'Notalari cikar'a bas (6 dk'lik kanal ~15-40 sn).\n\n"
@@ -215,6 +246,7 @@ def main() -> None:
         shutil.rmtree(STAGE)
     print("  modeller hazirlaniyor")
     models = stage_models()
+    ffmpeg = stage_ffmpeg()
 
     run_pyinstaller(models)
 
@@ -223,6 +255,9 @@ def main() -> None:
         sys.exit("PyInstaller ciktisi bulunamadi")
     for d in ("songs", "stems"):
         (out / d).mkdir(exist_ok=True)
+    # _internal'a degil exe'nin yanina: app/updater.py orada ariyor ve
+    # kullanici LGPL geregi DLL'leri kolayca degistirebilmeli
+    shutil.copytree(ffmpeg, out / "ffmpeg")
     write_readme(out)
 
     size = sum(f.stat().st_size for f in out.rglob("*") if f.is_file())

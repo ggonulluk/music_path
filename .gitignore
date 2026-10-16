@@ -5,3 +5,5 @@ stems/
 __pycache__/
 build/
 dist/
+ffmpeg/
+yt-dlp/
