@@ -75,7 +75,7 @@ def stage_models() -> Path:
     return STAGE / "models"
 
 
-VERSION = (0, 6, 0, 0)    # GitHub release etiketiyle ayni tutulmali
+VERSION = (0, 7, 0, 0)    # GitHub release etiketiyle ayni tutulmali
 
 
 def write_version_file() -> Path:

@@ -65,6 +65,8 @@ safetensors==0.8.0
 scikit-learn==1.9.0
 scipy==1.17.1
 Send2Trash==2.1.0
+# resampy pkg_resources kullaniyor; setuptools 81+ onu kaldirdi (nota cikarma bozuluyor)
+setuptools==80.9.0
 six==1.17.0
 soundfile==0.14.0
 soxr==1.1.0
