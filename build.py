@@ -27,6 +27,7 @@ Tasarim kararlari:
 """
 from __future__ import annotations
 
+import importlib.metadata as md
 import os
 import shutil
 import subprocess
@@ -75,7 +76,7 @@ def stage_models() -> Path:
     return STAGE / "models"
 
 
-VERSION = (0, 7, 0, 0)    # GitHub release etiketiyle ayni tutulmali
+VERSION = (0, 7, 1, 0)    # GitHub release etiketiyle ayni tutulmali
 
 
 def write_version_file() -> Path:
@@ -175,6 +176,47 @@ def stage_ffmpeg() -> Path:
     return dest
 
 
+# Yalnizca derleme araci: pakete girmiyorlar, lisanslari da gelmesin
+BUILD_ONLY = {"pip", "pyinstaller", "pyinstaller-hooks-contrib", "altgraph",
+              "pefile", "pywin32-ctypes", "pillow"}
+
+
+def copy_licenses(out: Path) -> None:
+    """Lisans metinleri pakette durmali (MIT/BSD/Apache de bunu istiyor).
+
+    Metinler kurulu paketlerin kendi dosyalarindan aliniyor; PyInstaller
+    onlari tasimiyor. Elle tutulan liste yerine boylece yeni bagimlilik
+    kendiliginden gelir.
+    """
+    dest = out / "lisanslar"
+    dest.mkdir()
+    shutil.copy(ROOT / "LICENSE", dest / "GgMix-LICENSE.txt")
+    shutil.copy(ROOT / "THIRD-PARTY-NOTICES.md", dest)
+    # LGPL-3.0, GPL-3.0 metnine atif yapiyor ve onunla birlikte gitmeli
+    shutil.copy(ROOT / "licenses" / "GPL-3.0.txt", dest)
+    extra = {
+        "libsndfile": md.distribution("soundfile").locate_file("_soundfile_data/COPYING"),
+        "Python": Path(sys.base_prefix) / "LICENSE.txt",
+    }
+    for name, src in extra.items():
+        (dest / name).mkdir()
+        shutil.copy(src, dest / name)
+
+    prefixes = ("LICEN", "COPYING", "NOTICE", "AUTHORS")
+    for dist in md.distributions():
+        name = dist.metadata["Name"]
+        if name.lower() in BUILD_ONLY:
+            continue
+        files = [f for f in dist.files or [] if f.name.upper().startswith(prefixes)]
+        if not files:
+            print(f"  lisans metni yok: {name}")
+            continue
+        (dest / name).mkdir(exist_ok=True)
+        for f in files:
+            shutil.copy(dist.locate_file(f), dest / name / f.name)
+    print(f"  lisanslar: {sum(d.is_dir() for d in dest.iterdir())} bilesen")
+
+
 def write_readme(out: Path) -> None:
     (out / "OKUBENI.txt").write_text(
         # Bitisik iki metin once birlesip sonra 40'la carpiliyordu:
@@ -205,6 +247,11 @@ def write_readme(out: Path) -> None:
         "NOTA VE AKOR CIKARMA\n"
         "  Pakete dahil, ek kurulum gerekmez. Nota panelinde\n"
         "  'Notalari cikar'a bas (6 dk'lik kanal ~15-40 sn).\n\n"
+        "LISANS\n"
+        "  Kisisel, ticari olmayan kullanim icin ucretsizdir; paketi\n"
+        "  degistirmeden paylasabilirsin. Garanti verilmez. Kosullar ve\n"
+        "  ucuncu taraf bilesenlerin lisanslari lisanslar\\ klasorunde.\n"
+        "  Isledigin muzigin telif haklarina uymak sana aittir.\n\n"
         "SORUN OLURSA\n"
         "  Bu klasordeki GgMix.log dosyasina bak.\n",
         encoding="utf-8")
@@ -258,6 +305,7 @@ def main() -> None:
     # _internal'a degil exe'nin yanina: app/updater.py orada ariyor ve
     # kullanici LGPL geregi DLL'leri kolayca degistirebilmeli
     shutil.copytree(ffmpeg, out / "ffmpeg")
+    copy_licenses(out)
     write_readme(out)
 
     size = sum(f.stat().st_size for f in out.rglob("*") if f.is_file())

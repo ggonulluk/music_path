@@ -1,25 +1,43 @@
 Telif Hakkı (c) 2026 Gökhan Gönüllü
 
-Bu, kişisel kullanım için yazılmış bir projedir. Tüm hakları saklıdır.
+Bu lisans, bu depodaki kendi kodumuz ile GgMix adıyla yayınlanan hazır
+paket için geçerlidir. Tüm hakları saklıdır; aşağıda açıkça verilen izinler
+dışındaki kullanımlar yazılı izin gerektirir.
 
-Bu depodaki kaynak kodu izinsiz kopyalanamaz, değiştirilemez, dağıtılamaz
-ya da türev çalışma üretmek için kullanılamaz.
 
----
+VERİLEN İZİNLER
+
+Herkes, bu deponun GitHub Releases sayfasında yayınlanan GgMix paketini
+ücretsiz olarak:
+
+  - indirebilir, kurabilir ve kişisel, ticari olmayan amaçla kullanabilir;
+  - paketi değiştirmeden başkalarıyla ücretsiz paylaşabilir ya da indirme
+    bağlantısını iletebilir.
+
+
+İZİN VERİLMEYENLER
+
+Yazılı izin olmadan:
+
+  - program ya da kaynak kodu satılamaz veya ticari amaçla kullanılamaz;
+  - kaynak kodu kopyalanıp değiştirilmiş veya türev sürüm olarak
+    dağıtılamaz.
+
+Bu sınırlar, üçüncü taraf bileşenlerin kendi lisanslarının verdiği hakları
+(örneğin LGPL kapsamındaki kütüphaneleri değiştirme hakkını) kısıtlamaz.
+
+
+GARANTİ YOKTUR
+
+Program "olduğu gibi" sunulur; hiçbir garanti verilmez. Kullanımdan doğan
+zararlardan yazar sorumlu değildir. İndirilen ve işlenen içeriğin telif
+haklarına ve ilgili sitelerin kullanım şartlarına uymak kullanıcının
+sorumluluğundadır.
+
 
 ÜÇÜNCÜ TARAF BİLEŞENLER
 
-Bu proje, kendi lisansları altında dağıtılan açık kaynak kütüphaneler
-kullanır. Yukarıdaki koşullar YALNIZCA bu depodaki kendi kodumuz için
-geçerlidir; üçüncü taraf bileşenler kendi lisanslarına tabidir.
-
-Ayrıntılı liste ve paketleme kısıtları: THIRD-PARTY-NOTICES.md
-
----
-
-NOT
-
-Bu dosya bugünkü niyeti kaydediyor: program dağıtılmıyor, kişisel bir
-çalışma aracı olarak kullanılıyor. İleride paylaşmak istersen bu dosyayı
-değiştirmen yeterli — ama önce THIRD-PARTY-NOTICES.md'deki paketleme
-kısıtlarını oku, çünkü bazıları dağıtımla birlikte yükümlülük doğuruyor.
+Yukarıdaki koşullar YALNIZCA bu projenin kendi kodu için geçerlidir.
+Üçüncü taraf bileşenler kendi lisanslarına tabidir. Liste ve kaynak kodu
+adresleri: THIRD-PARTY-NOTICES.md. Pakette lisans metinleri lisanslar\
+klasöründedir.

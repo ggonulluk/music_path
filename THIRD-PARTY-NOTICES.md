@@ -4,10 +4,10 @@ GgMix açık kaynak kütüphaneler kullanıyor. Bu dosya hangi bileşenin hangi
 lisansla geldiğini ve **paketleme sırasında bozulmaması gereken kısıtları**
 kaydediyor.
 
-> **Bugünkü durum:** Program dağıtılmıyor, kişisel kullanımda. Aşağıdaki
-> yükümlülüklerin neredeyse tamamı **dağıtımda** doğar, kullanımda değil.
-> Yani bugün uyulması gereken bir şey yok. Bu dosya, ileride paylaşmaya
-> karar verilirse nelere bakılacağını kaydetmek için var.
+> **Bugünkü durum:** Program GitHub Releases'te **ücretsiz dağıtılıyor**.
+> Bu dosyadaki yükümlülükler bu yüzden geçerli ve paket onlara uyacak şekilde
+> derleniyor: `build.py` bu dosyayı ve bileşenlerin lisans metinlerini
+> paketteki `lisanslar\` klasörüne koyuyor.
 
 Lisanslar, kurulu paketlerin kendi `METADATA` dosyalarından okundu.
 
@@ -94,6 +94,21 @@ taşıyor — ileride bir kurulum onu geri getirirse pakete girmesin diye.
 | lameenc | LGPL-3.0-or-later |
 | soxr | LGPL-2.1-or-later |
 | FFmpeg (`ffmpeg\`, BtbN lgpl-shared derlemesi) | LGPL-3.0-or-later |
+| libsndfile (`soundfile` paketinin DLL'i) | LGPL-2.1-or-later |
+
+Hepsi pakette ayrı dosyalar; kullanıcı kendi derlediği uyumlu sürümle
+değiştirebilir. Kaynak kodları:
+
+| Bileşen | Kaynak kodu |
+|---|---|
+| lameenc | <https://github.com/chrisstaite/lameenc> |
+| soxr | <https://github.com/dofuuz/python-soxr> |
+| FFmpeg | <https://git.ffmpeg.org/ffmpeg.git> (sürüm ve commit: `ffmpeg\KAYNAK.txt`); derleme betikleri <https://github.com/BtbN/FFmpeg-Builds> |
+| libsndfile | <https://github.com/libsndfile/libsndfile> |
+
+Lisans metinleri `lisanslar\` içinde. LGPL-3.0 metni GPL-3.0'a atıfta
+bulunduğu için GPL-3.0 metni de pakette (`licenses/GPL-3.0.txt`); bu GgMix'in
+GPL olduğu anlamına gelmiyor.
 
 ### Dosya bazlı copyleft — bildirimi taşımak yeterli
 
@@ -101,6 +116,15 @@ taşıyor — ileride bir kurulum onu geri getirirse pakete girmesin diye.
 |---|---|
 | certifi | MPL-2.0 |
 | tqdm | MPL-2.0 AND MIT |
+
+### Paketle gelen diğer çalışma zamanı parçaları
+
+| Bileşen | Lisans |
+|---|---|
+| Python 3.11 (OpenSSL, SQLite, libffi dahil) | PSF-2.0 ve bileşen lisansları (`lisanslar\Python`) |
+| numba, llvmlite | BSD (llvmlite LLVM bildirimleriyle) |
+| OpenBLAS (numpy/scipy içinde) | BSD-3 |
+| Microsoft Visual C++ çalışma zamanı | Microsoft yeniden dağıtım şartları |
 
 ### Arayüz
 
@@ -152,8 +176,13 @@ htdemucs modelleri **MUSDB18-HQ** veri seti üzerinde eğitildi; o veri seti
 yayınlıyor. Eğitim verisinin türev modelin ticari kullanımını kısıtlayıp
 kısıtlamadığı yerleşmiş bir hukuki soru değil.
 
-**Kişisel kullanımda önemi yok.** Satış düşünülürse hukukçuya sorulacak tek
-madde budur.
+**Bugünkü ücretsiz ve ticari olmayan dağıtımda sorun oluşturması beklenmez.**
+Satış düşünülürse hukukçuya sorulacak tek madde budur.
+
+Müzik bu lisanslara dahil değil: kullanıcının işlediği şarkıların telif
+hakkı ve sitelerin kullanım şartları ayrı konu. Pakette hiçbir şarkı
+gelmemeli; `guard_user_data` bu yüzden dolu `songs\`/`stems\` ile
+derlemeyi durduruyor.
 
 ---
 
@@ -165,4 +194,7 @@ madde budur.
 .venv/Scripts/python.exe -c "import importlib.metadata as md; m=md.metadata('PAKET'); print(m.get('License-Expression') or m.get('License') or [c for c in m.get_all('Classifier') or [] if 'License' in c])"
 ```
 
-Tek bir GPL'li paket dağıtım planını değiştirmeye yeter.
+Tek bir GPL'li paket dağıtım planını değiştirmeye yeter. Yeni bileşeni bu
+dosyaya da ekleyin. `build.py` lisans metnini paketin kendi dosyalarından
+alır; metin taşımayan paketleri derleme çıktısında yazar (bugün:
+`flatbuffers`, Apache-2.0).

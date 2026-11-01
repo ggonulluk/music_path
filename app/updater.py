@@ -35,6 +35,7 @@ import json
 import re
 import shutil
 import ssl
+import subprocess
 import sys
 import threading
 import time
@@ -151,9 +152,13 @@ def install_ffmpeg(dest: Path = FFMPEG_DIR, progress=None) -> str:
     if not (tmp / "ffmpeg.exe").is_file() or not (tmp / "ffprobe.exe").is_file():
         shutil.rmtree(tmp, ignore_errors=True)
         raise RuntimeError("arşivde ffmpeg.exe/ffprobe.exe yok")
+    # LGPL: hangi kaynaktan derlendigi izlenebilmeli (surum satiri commit'i veriyor)
+    version = subprocess.run([str(tmp / "ffmpeg.exe"), "-version"], capture_output=True,
+                             text=True, check=True).stdout.splitlines()[0]
     (tmp / "KAYNAK.txt").write_text(
-        f"{name}\nhttps://github.com/BtbN/FFmpeg-Builds\n"
-        "FFmpeg LGPL derlemesi. Kaynak kodu: https://ffmpeg.org/download.html\n",
+        f"{version}\nDerleme: {name} (https://github.com/BtbN/FFmpeg-Builds)\n"
+        "Lisans: LGPL-3.0-or-later (LICENSE.txt)\n"
+        "Kaynak kodu: https://git.ffmpeg.org/ffmpeg.git\n",
         encoding="utf-8")
     shutil.rmtree(dest, ignore_errors=True)
     tmp.rename(dest)
