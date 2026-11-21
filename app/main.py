@@ -22,7 +22,7 @@ from starlette.background import BackgroundTask
 # ayni dakikayi veriyor, oynatici sureyi zaten cozulmus sesten aliyor).
 from tinytag import TinyTag
 
-from . import analysis, fetch, library, mixdown, paths, record, transcribe, updater
+from . import analysis, fetch, library, mixdown, paths, record, tabs, transcribe, updater
 from .separator import QUEUE, SONGS, STEMS, STEM_ORDER
 
 AUDIO_EXT = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus", ".aac", ".wma"}
@@ -482,5 +482,8 @@ def mix_download(sid: str, g: str = ""):
 def health():
     return {"ok": True, "songs": len(scan())}
 
+
+# Tab ekrani (static/tab.html) kendi uclarini app/tabs.py'de tutuyor
+app.include_router(tabs.make_router(scan, STEMS))
 
 app.mount("/", StaticFiles(directory=STATIC, html=True), name="static")
