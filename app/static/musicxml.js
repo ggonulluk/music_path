@@ -58,8 +58,56 @@ function splitDur(d) {
   return out;
 }
 
-/* Notalari izgaraya oturt: [{q, len, notes:[{pitch, string, fret}]}] (birim). */
-function quantize(notes, fings, beats, origin) {
+/* SADELESTIRME: tabdaki kalabalik yigilmalari azaltir.
+
+   Olculdu (Tarantula, Yagdir Gunahlari): notalarin ~%9'u 4+ notali
+   es zamanli gruplarda. Iki kaynak var ve ikisi de burada ele aliniyor:
+     1. Zayif notalar - ayni anda baslayan grubun en guclu notasinin cok
+        altinda kalanlar. Cogunlukla sizinti ya da harmonik, calinan nota
+        degil.
+     2. Hayalet notalar - hem cok kisa hem zayif olanlar.
+   Ucuncu kaynak (birbirine yakin notalarin ayni onaltiliga yuvarlanip
+   akor olmasi) yalnizca MusicXML'de olusuyor; onu quantize'daki
+   maxChord siniri ele aliyor.
+
+   Saf fonksiyon: ham notalara dokunmaz, yeni dizi doner. Ekran ve
+   disa aktarim ayni sonucu kullanir ki gorulen ile inen ayni olsun.
+*/
+const SIMPLE = {
+  window: 0.06,       // bu kadar yakin baslayanlar ayni grup (fretboard.js ile ayni)
+  relAmp: 0.75,       // grubun en guclusunun bu oranindan zayiflar atilir
+  maxChord: 4,        // grup basina en fazla nota (en gucluler kalir)
+  ghostDur: 0.09,     // bundan kisa VE...
+  ghostAmp: 0.45,     // ...bundan zayif notalar hayalet sayilir
+};
+
+function simplify(notes, o = SIMPLE) {
+  const out = [];
+  let group = [];
+  const flush = () => {
+    if (!group.length) return;
+    const top = Math.max(...group.map((n) => n[3]));
+    const seen = new Set();
+    group
+      .filter((n) => n[3] >= top * o.relAmp)
+      .filter((n) => !(n[1] - n[0] < o.ghostDur && n[3] < o.ghostAmp))
+      .sort((a, b) => b[3] - a[3])
+      .filter((n) => !seen.has(n[2]) && seen.add(n[2]))
+      .slice(0, o.maxChord)
+      .forEach((n) => out.push(n));
+    group = [];
+  };
+  for (const n of notes) {
+    if (group.length && n[0] - group[0][0] > o.window) flush();
+    group.push(n);
+  }
+  flush();
+  return out.sort((a, b) => a[0] - b[0] || a[2] - b[2]);
+}
+
+/* Notalari izgaraya oturt: [{q, len, notes:[{pitch, string, fret}]}] (birim).
+   maxChord: ayni onaltiliga dusen notalardan en fazla kacinin kalacagi. */
+function quantize(notes, fings, beats, origin, maxChord = Infinity) {
   const byQ = new Map();
   notes.forEach((n, i) => {
     const f = fings[i];
@@ -70,14 +118,20 @@ function quantize(notes, fings, beats, origin) {
     let ev = byQ.get(q);
     if (!ev) { ev = { q, len: 1, notes: [] }; byQ.set(q, ev); }
     ev.len = Math.max(ev.len, e - q, 1);
-    // Ayni tel ayni anda tek nota calar; sonra gelen kazanir
-    ev.notes = ev.notes.filter((x) => x.string !== f[0] && x.pitch !== n[2]);
-    ev.notes.push({ pitch: n[2], string: f[0], fret: f[1] });
+    // Ayni tel ayni anda tek nota calar: celisirse guclu olan kalir
+    const amp = n[3] || 0;
+    const clash = ev.notes.filter((x) => x.string === f[0] || x.pitch === n[2]);
+    if (clash.some((x) => x.amp > amp)) return;
+    ev.notes = ev.notes.filter((x) => !clash.includes(x));
+    ev.notes.push({ pitch: n[2], string: f[0], fret: f[1], amp });
   });
   const evs = [...byQ.values()].sort((a, b) => a.q - b.q);
   for (let i = 0; i < evs.length; i++) {
     const next = evs[i + 1];
     if (next) evs[i].len = Math.min(evs[i].len, next.q - evs[i].q);
+    if (evs[i].notes.length > maxChord) {
+      evs[i].notes = evs[i].notes.sort((a, b) => b.amp - a.amp).slice(0, maxChord);
+    }
     evs[i].notes.sort((a, b) => a.string - b.string);
   }
   return evs;
@@ -108,13 +162,13 @@ function noteXML(dur, type, dot, n, chord, tie) {
   return x + '</notations></note>';
 }
 
-/* opts: { title, notes, fings, beats, downbeat, perBar, chords, key } */
+/* opts: { title, notes, fings, beats, downbeat, perBar, chords, key, maxChord } */
 function build(opts) {
   const { title = 'GgMix', notes, fings, beats, downbeat = 0,
-          perBar = 4, chords = [], key = null } = opts;
+          perBar = 4, chords = [], key = null, maxChord = Infinity } = opts;
   if (!beats || beats.length < 2) throw new Error('vuruş ızgarası yok');
   const barLen = perBar * DIV;
-  const evs = quantize(notes, fings, beats, downbeat);
+  const evs = quantize(notes, fings, beats, downbeat, maxChord);
   const last = evs.length ? evs[evs.length - 1] : { q: 0, len: 0 };
   const total = Math.max(1, Math.ceil((last.q + last.len) / barLen));
 
@@ -207,7 +261,7 @@ function build(opts) {
   return xml + '</part></score-partwise>\n';
 }
 
-const MusicXML = { build, quantize, beatPos, splitDur, DIV };
+const MusicXML = { build, quantize, simplify, SIMPLE, beatPos, splitDur, DIV };
 if (typeof module !== 'undefined') module.exports = MusicXML;
 else window.MusicXML = MusicXML;
 }());

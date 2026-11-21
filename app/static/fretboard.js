@@ -65,11 +65,19 @@ function handPos(fg) {
   return fretted.reduce((a, b) => a + b, 0) / fretted.length;
 }
 
-/* Pozisyonun kendi zorlugu: gerilme ve bos tel kolayligi. */
-function localCost(fg) {
+/* Pozisyonun kendi zorlugu: gerilme ve bos tel kolayligi.
+
+   height: perde basina kucuk ceza (varsayilan 0 = eski davranis). Bos
+   teller el konumu tasimadigi icin, onlardan sonra gelen notada (ya da
+   sarki basinda) hareket maliyeti sifir kalir ve her pozisyon esit
+   gorunur; secim aday sirasina kalir ve 18. perde gibi uzak bir yer
+   cikabilir. Kucuk bir ceza bu esitligi alt perdeler lehine bozar; el
+   bir bolgedeyken hareket maliyeti (perde basina 1) yine baskin kalir. */
+function localCost(fg, height = 0) {
   const fretted = fg.filter((x) => x[1] > 0).map((x) => x[1]);
   const open = fg.length - fretted.length;
   let c = -0.35 * open;                       // bos tel kolay, odullendir
+  if (height && fretted.length) c += height * Math.max(...fretted);
   if (fretted.length > 1) {
     const span = Math.max(...fretted) - Math.min(...fretted);
     if (span > COMFORT_SPAN) c += (span - COMFORT_SPAN) * 3.5;
@@ -98,8 +106,10 @@ function buildEvents(notes) {
 /* Tum sarki icin parmak pozisyonlarini sec.
 
    Donen dizi notalarla ayni sirada: her nota icin [tel, perde] ya da null.
+   opts.height: bkz. localCost (tab ekrani kullaniyor; ana ekran 0).
 */
-function assignFingerings(notes) {
+function assignFingerings(notes, opts = {}) {
+  const height = opts.height || 0;
   const out = new Array(notes.length).fill(null);
   const events = buildEvents(notes);
   if (!events.length) return out;
@@ -109,7 +119,7 @@ function assignFingerings(notes) {
 
   for (const ev of events) {
     let opts = fingerings(ev.pitches)
-      .map((fg) => ({ fg, pos: handPos(fg), lc: localCost(fg) }));
+      .map((fg) => ({ fg, pos: handPos(fg), lc: localCost(fg, height) }));
     if (!opts.length) { table.push([]); prev = null; continue; }
     opts.sort((a, b) => a.lc - b.lc);
     opts = opts.slice(0, MAXF.optionsPerEvent);

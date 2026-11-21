@@ -70,6 +70,8 @@
         <input id="tb-zoom" type="range" min="60" max="400" step="10" value="160">
       </label>
       <label class="tb-check"><input id="tb-names" type="checkbox" checked> Nota adları</label>
+      <label class="tb-check" title="Zayıf ve hayalet notaları ayıklar, akor yığınlarını en fazla 4 notaya indirir. MusicXML de buna göre çıkar.">
+        <input id="tb-simple" type="checkbox" checked> Sadeleştir</label>
       <span class="tb-group">
         <span class="tb-dim">Ölçü</span>
         <select id="tb-meter" title="Ölçü türü">
@@ -86,7 +88,8 @@
 
     <p class="tb-note tb-dim">
       Tab ve akorlar modelin <b>tahminidir</b>; teller ve perdeler elin en az
-      hareket edeceği şekilde seçilir. Ölçü çizgileri yanlış yerdeyse
+      hareket edeceği şekilde seçilir. <b>Sadeleştir</b> açıkken zayıf ve çok kısa notalar
+      ayıklanır, aynı anda çalan nota sayısı en fazla 4'e iner. Ölçü çizgileri yanlış yerdeyse
       <b>baş</b> düğmeleriyle kaydır, tempo yanlışsa ×½ / ×2 seç —
       MusicXML dosyası da bu ayarlarla çıkar. Boşluk: oynat/durdur,
       tab'a tıkla: o noktaya git.

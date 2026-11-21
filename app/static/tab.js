@@ -20,10 +20,13 @@
 const $ = (s) => document.querySelector(s);
 const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (p) => NAMES[p % 12] + (Math.floor(p / 12) - 1);
+// Uzak perde secimine karsi kucuk ceza (fretboard.js localCost)
+const HEIGHT = 0.04;
 const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 
 const T = {
-  song: null, notes: [], fings: [], events: [], chords: [], key: null,
+  song: null, raw: [], notes: [], fings: [], events: [], chords: [], key: null,
+  simple: true, info: null,                     // sadelestirme acik mi
   beatsRaw: null, downRaw: 0,
   grid: null, down: 0,                          // ayarlar uygulanmis izgara
   perBar: 4, tempoMul: 1, shift: 0,
@@ -48,15 +51,17 @@ function loadSettings() {
     if ([3, 4].includes(s.perBar)) T.perBar = s.perBar;
     if ([0.5, 1, 2].includes(s.tempoMul)) T.tempoMul = s.tempoMul;
     if (Number.isInteger(s.shift)) T.shift = s.shift;
+    if (typeof s.simple === 'boolean') T.simple = s.simple;
   } catch (e) { /* tarayici depolamasi kapali olabilir */ }
   $('#tb-meter').value = String(T.perBar);
   $('#tb-tempo').value = String(T.tempoMul);
+  $('#tb-simple').checked = T.simple;
 }
 
 function saveSettings() {
   try {
     localStorage.setItem(settingsKey(),
-      JSON.stringify({ perBar: T.perBar, tempoMul: T.tempoMul, shift: T.shift }));
+      JSON.stringify({ perBar: T.perBar, tempoMul: T.tempoMul, shift: T.shift, simple: T.simple }));
   } catch (e) { /* yok say */ }
 }
 
@@ -307,12 +312,10 @@ async function loadNotes() {
   const r = await api(`/api/songs/${T.song.id}/notes/gitar`);
   if (r.status === 200) {
     const d = await r.json();
-    T.notes = d.notes;
-    T.fings = Fretboard.assignFingerings(T.notes);
-    buildEvents();
+    T.raw = d.notes;
+    T.info = d;
+    applyNotes();
     status('');
-    $('#tb-sub').textContent = [T.song.artist, `${d.count} nota · ${d.low}–${d.high}`]
-      .filter(Boolean).join(' · ');
     updateXmlButton();
     return;
   }
@@ -355,6 +358,18 @@ async function loadBeats() {
   updateXmlButton();
 }
 
+/* Gosterilecek notalar: sadelestirme aciksa zayif/hayalet notalar ayiklanmis
+   hali. Parmak pozisyonlari da bu dizi uzerinden yeniden seciliyor. */
+function applyNotes() {
+  T.notes = T.simple ? MusicXML.simplify(T.raw) : T.raw;
+  T.fings = Fretboard.assignFingerings(T.notes, { height: HEIGHT });
+  buildEvents();
+  const d = T.info;
+  const count = T.simple ? `${T.notes.length} / ${T.raw.length} nota (sadeleştirilmiş)` : `${T.raw.length} nota`;
+  $('#tb-sub').textContent = [T.song.artist, `${count} · ${d.low}–${d.high}`]
+    .filter(Boolean).join(' · ');
+}
+
 function updateXmlButton() {
   $('#tb-xml').disabled = !(T.notes.length && T.grid);
 }
@@ -370,6 +385,7 @@ function exportXml() {
     notes: T.notes, fings: T.fings,
     beats: T.grid, downbeat: origin(), perBar: T.perBar,
     chords: T.chords, key: T.key,
+    maxChord: T.simple ? MusicXML.SIMPLE.maxChord : Infinity,
   });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([xml], { type: 'application/vnd.recordare.musicxml+xml' }));
@@ -430,6 +446,10 @@ function wire() {
   $('#tb-rate').onchange = (e) => { T.au.playbackRate = parseFloat(e.target.value); };
   $('#tb-zoom').oninput = (e) => { T.pps = parseFloat(e.target.value); };
   $('#tb-names').onchange = (e) => { T.names = e.target.checked; };
+  $('#tb-simple').onchange = (e) => {
+    T.simple = e.target.checked; saveSettings();
+    if (T.raw.length) applyNotes();
+  };
   $('#tb-meter').onchange = (e) => { T.perBar = parseInt(e.target.value, 10); rebuildGrid(); saveSettings(); };
   $('#tb-tempo').onchange = (e) => { T.tempoMul = parseFloat(e.target.value); T.shift = 0; rebuildGrid(); saveSettings(); };
   $('#tb-shift-l').onclick = () => { T.shift--; rebuildGrid(); saveSettings(); };
