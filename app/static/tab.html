@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GgMix — Tab</title>
+<link rel="icon" href="favicon.png" type="image/png">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="tab.css">
+</head>
+<body class="tabpage">
+
+<!-- Tab ekrani ana oynaticidan bilerek ayri: kendi sesi, kendi saati.
+     Ana programin hicbir durumunu kullanmiyor; sadece ayni API'yi. -->
+<header>
+  <h1><a href="./" class="tb-home"><span class="dot"></span> GgMix</a>
+    <span class="tb-sep">/</span> Tab</h1>
+  <div class="head-right">
+    <a class="ghost" href="./" id="tb-back">Ana ekran</a>
+  </div>
+</header>
+
+<main class="tb-main">
+  <!-- Sarki secimi (?song= yoksa) -->
+  <section id="tb-pick" class="hidden">
+    <h2>Şarkı seç</h2>
+    <p class="tb-dim">Kanallara ayrılmış şarkılar. Gitar notaları çıkarılmamışsa bu ekrandan başlatabilirsin.</p>
+    <div id="tb-list" class="tb-list"></div>
+  </section>
+
+  <section id="tb-view" class="hidden">
+    <div class="tb-top">
+      <div>
+        <div class="tb-title" id="tb-title"></div>
+        <div class="tb-dim" id="tb-sub"></div>
+      </div>
+      <button id="tb-xml" class="btn sec" disabled title="Guitar Pro, TuxGuitar, MuseScore açar">MusicXML indir</button>
+    </div>
+
+    <div id="tb-status" class="tb-status hidden"></div>
+
+    <div class="tb-stage">
+      <canvas id="tb-canvas"></canvas>
+    </div>
+
+    <div class="tb-bar">
+      <button id="tb-play" class="btn" disabled>▶</button>
+      <span id="tb-time" class="tb-time">0:00 / 0:00</span>
+      <input id="tb-seek" type="range" min="0" max="1" step="0.01" value="0" disabled>
+    </div>
+
+    <div class="tb-controls">
+      <label>Ses
+        <select id="tb-mode">
+          <option value="source">Tam şarkı</option>
+          <option value="gitar">Sadece gitar</option>
+          <option value="nogitar">Gitarsız</option>
+        </select>
+      </label>
+      <label>Hız
+        <select id="tb-rate">
+          <option value="0.5">%50</option><option value="0.6">%60</option>
+          <option value="0.7">%70</option><option value="0.75">%75</option>
+          <option value="0.8">%80</option><option value="0.9">%90</option>
+          <option value="1" selected>%100</option>
+        </select>
+      </label>
+      <label>Yakınlık
+        <input id="tb-zoom" type="range" min="60" max="400" step="10" value="160">
+      </label>
+      <label class="tb-check"><input id="tb-names" type="checkbox" checked> Nota adları</label>
+      <label class="tb-check" title="Zayıf ve hayalet notaları ayıklar, akor yığınlarını en fazla 4 notaya indirir. MusicXML de buna göre çıkar.">
+        <input id="tb-simple" type="checkbox" checked> Sadeleştir</label>
+      <span class="tb-group">
+        <span class="tb-dim">Ölçü</span>
+        <select id="tb-meter" title="Ölçü türü">
+          <option value="4">4/4</option><option value="3">3/4</option>
+        </select>
+        <select id="tb-tempo" title="Vuruş algılayıcı bazen tempoyu iki katı ya da yarısı bulur">
+          <option value="1">tempo ×1</option><option value="0.5">tempo ×½</option><option value="2">tempo ×2</option>
+        </select>
+        <button id="tb-shift-l" class="ghost mini" title="Ölçü başını bir vuruş geri al">◀</button>
+        <span class="tb-dim">baş</span>
+        <button id="tb-shift-r" class="ghost mini" title="Ölçü başını bir vuruş ileri al">▶</button>
+      </span>
+    </div>
+
+    <div class="tb-speed">
+      <div class="tb-speed-row">
+        <b>Hız çalışması</b>
+        <button id="tb-a" class="ghost mini" title="Döngü başı: çalınan yer (kısayol: A)">A · baş</button>
+        <button id="tb-b" class="ghost mini" title="Döngü sonu: çalınan yer (kısayol: B)">B · son</button>
+        <button id="tb-loop-clear" class="ghost mini" disabled>Temizle</button>
+        <label class="tb-check" title="A ve B en yakın ölçü çizgisine oturur">
+          <input id="tb-snap" type="checkbox" checked> Ölçüye oturt</label>
+        <span id="tb-loop" class="tb-dim"></span>
+      </div>
+      <div class="tb-speed-row">
+        <label>Başlangıç <select id="tb-from"></select></label>
+        <label>Hedef <select id="tb-to"></select></label>
+        <label>Artış <select id="tb-step"></select></label>
+        <label>Her <select id="tb-every"></select> turda bir</label>
+        <button id="tb-train" class="btn sec" disabled>Çalışmayı başlat</button>
+        <span id="tb-train-info" class="tb-train-info" role="status"></span>
+      </div>
+    </div>
+
+    <p class="tb-note tb-dim">
+      Tab ve akorlar modelin <b>tahminidir</b>; teller ve perdeler elin en az
+      hareket edeceği şekilde seçilir. <b>Sadeleştir</b> açıkken zayıf ve çok kısa notalar
+      ayıklanır, aynı anda çalan nota sayısı en fazla 4'e iner. Ölçü çizgileri yanlış yerdeyse
+      <b>baş</b> düğmeleriyle kaydır, tempo yanlışsa ×½ / ×2 seç —
+      MusicXML dosyası da bu ayarlarla çıkar. Boşluk: oynat/durdur,
+      tab'a tıkla: o noktaya git, <b>A</b> / <b>B</b>: döngünün başı ve sonu.
+      Döngünün dışına çıkmak için önce duraklat ya da döngüyü temizle.
+    </p>
+  </section>
+</main>
+
+<script src="fretboard.js"></script>
+<script src="musicxml.js"></script>
+<script src="speed.js"></script>
+<script src="tab.js"></script>
+</body>
+</html>

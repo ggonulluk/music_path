@@ -585,6 +585,7 @@ function setPitch(n) {
 
 async function openPlayer(song) {
   P.song = song;
+  $('#btn-tab').href = 'tab.html?song=' + song.id;    // tab ekrani bu sarkiyla acilsin
   showView('player');
   $('#now-title').textContent = song.title || song.file;
   $('#now-sub').textContent = [song.artist, song.file].filter(Boolean).join(' · ');
