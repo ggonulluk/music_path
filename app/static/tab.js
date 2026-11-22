@@ -32,6 +32,7 @@ const T = {
   perBar: 4, tempoMul: 1, shift: 0,
   au: new Audio(), mode: 'source', mixUrl: null, modeReq: 0,
   pps: 160, names: true,
+  train: new Speed.Trainer(), snap: true,
   clock: { t: 0, at: 0, seen: -1 },
   raf: 0, poll: null,
 };
@@ -40,6 +41,14 @@ T.au.preservesPitch = true;
 window.GgTab = T;            // hata ayiklama: konsoldan durumu gormek icin
 
 const api = (u, o) => fetch(u, o);
+
+// Hiz calismasi secenekleri
+const CHOICES = {
+  from: [40, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100],
+  to: [60, 70, 75, 80, 85, 90, 95, 100, 105, 110, 120],
+  step: [1, 2, 3, 5, 10],
+  every: [1, 2, 3, 4, 5, 8],
+};
 
 /* ------------------------------------------------------------ ayarlar */
 
@@ -52,16 +61,29 @@ function loadSettings() {
     if ([0.5, 1, 2].includes(s.tempoMul)) T.tempoMul = s.tempoMul;
     if (Number.isInteger(s.shift)) T.shift = s.shift;
     if (typeof s.simple === 'boolean') T.simple = s.simple;
+    if (typeof s.snap === 'boolean') T.snap = s.snap;
+    for (const [k, list] of Object.entries(CHOICES)) {
+      if (s.speed && list.includes(s.speed[k])) T.train.cfg[k] = s.speed[k];
+    }
+    if (s.loop && Number.isFinite(s.loop.a) && s.loop.a >= 0) {
+      T.train.setA(s.loop.a);
+      if (Number.isFinite(s.loop.b)) T.train.setB(s.loop.b);
+    }
   } catch (e) { /* tarayici depolamasi kapali olabilir */ }
   $('#tb-meter').value = String(T.perBar);
   $('#tb-tempo').value = String(T.tempoMul);
   $('#tb-simple').checked = T.simple;
+  $('#tb-snap').checked = T.snap;
+  showSpeed();
 }
 
 function saveSettings() {
   try {
     localStorage.setItem(settingsKey(),
-      JSON.stringify({ perBar: T.perBar, tempoMul: T.tempoMul, shift: T.shift, simple: T.simple }));
+      JSON.stringify({
+        perBar: T.perBar, tempoMul: T.tempoMul, shift: T.shift, simple: T.simple,
+        snap: T.snap, speed: T.train.cfg, loop: { a: T.train.a, b: T.train.b },
+      }));
   } catch (e) { /* yok say */ }
 }
 
@@ -129,7 +151,6 @@ async function setMode(mode) {
   T.au.src = srcFor(mode);
   T.au.addEventListener('loadedmetadata', () => {
     T.au.currentTime = Math.min(t, T.au.duration || t);
-    T.au.playbackRate = parseFloat($('#tb-rate').value);
     if (wasPlaying) T.au.play();
   }, { once: true });
 }
@@ -140,7 +161,135 @@ function togglePlay() {
 }
 
 function seek(t) {
-  T.au.currentTime = Math.max(0, Math.min(t, T.au.duration || t));
+  const to = Math.max(0, Math.min(t, T.au.duration || t));
+  T.train.moved(to);
+  T.au.currentTime = to;
+}
+
+/* ------------------------------------------------------------ hiz calismasi */
+
+/* Hiz tek yerden degisir. Listede olmayan ara degerler (%63 gibi) gecici
+   secenek olarak eklenir; liste her zaman calan hizi gosterir.
+   defaultPlaybackRate: kaynak degisince tarayici hizi buna sifirliyor. */
+function setRate(pct) {
+  const sel = $('#tb-rate');
+  sel.querySelector('[data-temp]')?.remove();
+  let opt = [...sel.options].find((o) => Math.round(o.value * 100) === pct);
+  if (!opt) {
+    opt = new Option(`%${pct}`, String(pct / 100));
+    opt.dataset.temp = '1';
+    sel.add(opt, [...sel.options].find((o) => o.value * 100 > pct) || null);
+  }
+  sel.value = opt.value;
+  T.au.defaultPlaybackRate = T.au.playbackRate = pct / 100;
+}
+
+function showSpeed(msg = '') {
+  const tr = T.train;
+  $('#tb-a').classList.toggle('set', tr.a !== null);
+  $('#tb-b').classList.toggle('set', tr.b !== null);
+  $('#tb-loop-clear').disabled = tr.a === null;
+  $('#tb-loop').textContent = msg
+    || (tr.looping ? `döngü ${fmt(tr.a)} – ${fmt(tr.b)}`
+      : tr.a !== null ? `A ${fmt(tr.a)} · şimdi bitiş yerinde B'ye bas`
+        : 'Çalışacağın yerin başında A, sonunda B');
+  for (const k of Object.keys(CHOICES)) {
+    const el = $(`#tb-${k}`);
+    el.value = String(tr.cfg[k]);
+    el.disabled = tr.on;
+  }
+  const btn = $('#tb-train');
+  btn.disabled = !tr.looping;
+  btn.textContent = tr.on ? 'Çalışmayı bitir' : 'Çalışmayı başlat';
+  let info = '';
+  if (tr.on) {
+    info = `Tur ${tr.done + 1} · %${tr.rate}`;
+    if (tr.atTarget) info += ' · hedef hız';
+    else {
+      const left = tr.cfg.every - (tr.done % tr.cfg.every);
+      const next = Speed.rateAt(tr.cfg, tr.done + left);
+      info += left === 1 ? ` · sonraki tur %${next}` : ` · ${left} tur sonra %${next}`;
+    }
+  }
+  $('#tb-train-info').textContent = info;
+}
+
+function markPoint(which) {
+  const dur = T.au.duration;
+  if (!dur) return;
+  const tr = T.train;
+  const after = which === 'b' ? tr.a : undefined;
+  if (after === null) { showSpeed('Önce A ile başlangıcı seç'); return; }
+  let t = now();
+  if (which === 'b' && t <= after) { showSpeed('B, A\'dan sonra olmalı'); return; }
+  if (T.snap && T.grid) {
+    const bar = Speed.snapToBar(t, T.grid, T.down, T.perBar, after);
+    if (bar !== null && bar < dur) t = bar;
+  }
+  if (which === 'a') tr.setA(t);
+  else if (!tr.setB(Math.min(t, dur))) { showSpeed('Döngü çok kısa'); return; }
+  tr.moved(now());
+  saveSettings();
+  showSpeed();
+}
+
+function clearLoop() {
+  T.train.clear();
+  saveSettings();
+  showSpeed();
+}
+
+function toggleTraining() {
+  const tr = T.train;
+  if (tr.on) {
+    tr.stop();
+    T.au.pause();
+  } else if (tr.start()) {
+    setRate(tr.rate);
+    seek(tr.a);
+    T.au.play();
+  }
+  showSpeed();
+}
+
+/* Cizimden (requestAnimationFrame) bagimsiz: sekme arkadayken cizim durur
+   ama ses calmaya, dongu de donmeye devam etmeli. */
+function loopTick(ended = false) {
+  const au = T.au;
+  // readyState 0: kaynak degisiyor, currentTime gecici olarak sifir
+  if (au.readyState < 1 || (!ended && (au.paused || au.seeking))) return;
+  const cmd = T.train.tick(au.currentTime, ended);
+  if (!cmd) return;
+  au.currentTime = cmd.seek;
+  if (cmd.rate) { setRate(cmd.rate); showSpeed(); }
+  if (ended) au.play();
+}
+
+function wireSpeed() {
+  for (const [k, list] of Object.entries(CHOICES)) {
+    const el = $(`#tb-${k}`);
+    for (const v of list) el.add(new Option(k === 'every' ? String(v) : `%${v}`, String(v)));
+    el.onchange = () => {
+      const cfg = T.train.cfg;
+      cfg[k] = parseInt(el.value, 10);
+      // Hedef baslangicin altinda kalmasin
+      if (cfg.to < cfg.from) {
+        if (k === 'to') cfg.from = CHOICES.from.filter((v) => v <= cfg.to).pop();
+        else cfg.to = CHOICES.to.find((v) => v >= cfg.from);
+      }
+      saveSettings();
+      showSpeed();
+    };
+  }
+  $('#tb-a').onclick = () => markPoint('a');
+  $('#tb-b').onclick = () => markPoint('b');
+  $('#tb-loop-clear').onclick = clearLoop;
+  $('#tb-train').onclick = toggleTraining;
+  $('#tb-snap').onchange = (e) => { T.snap = e.target.checked; saveSettings(); e.target.blur(); };
+  setInterval(loopTick, 25);
+  T.au.addEventListener('timeupdate', () => loopTick());
+  T.au.addEventListener('ended', () => loopTick(true));
+  showSpeed();
 }
 
 /* ------------------------------------------------------------ cizim */
@@ -206,6 +355,26 @@ function draw() {
         c.fillStyle = DIM;
         c.fillText(String(Math.floor((i - origin()) / T.perBar) + 1), bx + 3, tabTop - 4);
       }
+    }
+  }
+
+  // ---- A-B dongusu (A tek basinayken yalnizca cizgisi)
+  const { a: la, b: lb } = T.train;
+  if (la !== null) {
+    if (lb !== null) {
+      const from = Math.max(gut, x(la)), to = Math.min(w, x(lb));
+      c.fillStyle = ACC; c.globalAlpha = 0.07;
+      if (to > from) c.fillRect(from, tabTop, to - from, tabBot - tabTop);
+      c.globalAlpha = 1;
+    }
+    c.font = '600 11px Segoe UI, system-ui, sans-serif';
+    for (const [name, at] of [['A', la], ['B', lb]]) {
+      if (at === null || x(at) < gut || x(at) > w) continue;
+      c.strokeStyle = c.fillStyle = ACC; c.lineWidth = 1.5;
+      c.setLineDash([4, 3]);
+      c.beginPath(); c.moveTo(x(at), tabTop); c.lineTo(x(at), tabBot + 8); c.stroke();
+      c.setLineDash([]);
+      c.fillText(name, x(at) + 4, tabBot + 16);
     }
   }
 
@@ -443,7 +612,12 @@ function wire() {
   T.au.addEventListener('pause', () => { $('#tb-play').textContent = '▶'; });
   $('#tb-seek').oninput = (e) => seek(parseFloat(e.target.value));
   $('#tb-mode').onchange = (e) => setMode(e.target.value);
-  $('#tb-rate').onchange = (e) => { T.au.playbackRate = parseFloat(e.target.value); };
+  $('#tb-rate').onchange = (e) => {
+    // Elle hiz secmek calismayi bitirir; dongu surer
+    T.train.stop();
+    setRate(Math.round(e.target.value * 100));
+    showSpeed();
+  };
   $('#tb-zoom').oninput = (e) => { T.pps = parseFloat(e.target.value); };
   $('#tb-names').onchange = (e) => { T.names = e.target.checked; };
   $('#tb-simple').onchange = (e) => {
@@ -463,13 +637,17 @@ function wire() {
   };
   document.addEventListener('keydown', (e) => {
     if (e.target.matches('input, select, textarea') && e.target.type !== 'range') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+    else if (!e.repeat && T.song && e.key.toLowerCase() === 'a') markPoint('a');
+    else if (!e.repeat && T.song && e.key.toLowerCase() === 'b') markPoint('b');
     else if (e.code === 'ArrowLeft') seek(now() - 5);
     else if (e.code === 'ArrowRight') seek(now() + 5);
   });
 }
 
 wire();
+wireSpeed();
 const id = new URLSearchParams(location.search).get('song');
 if (id) openSong(id); else showPicker();
 }());

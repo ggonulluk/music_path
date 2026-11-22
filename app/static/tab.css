@@ -49,6 +49,22 @@ a.ghost{text-decoration:none;display:inline-flex;align-items:center}
 .tb-check input{accent-color:var(--accent)}
 .tb-group{display:inline-flex;align-items:center;gap:6px}
 
+.tb-speed{
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:10px 14px;margin-top:14px;font-size:13px;color:var(--dim);
+  display:flex;flex-direction:column;gap:10px;
+}
+.tb-speed-row{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.tb-speed b{color:var(--fg);font-weight:600}
+.tb-speed label{display:inline-flex;align-items:center;gap:6px}
+.tb-speed select{
+  background:var(--panel-2);color:var(--fg);border:1px solid var(--line);
+  border-radius:7px;padding:4px 8px;font-family:inherit;font-size:12.5px;
+}
+.tb-speed select:disabled,.tb-speed button:disabled{opacity:.5;cursor:default}
+.tb-speed button.set{color:var(--accent);border-color:var(--accent)}
+.tb-train-info{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums}
+
 .tb-note{margin-top:18px;max-width:780px;line-height:1.6}
 
 @media (max-width:700px){

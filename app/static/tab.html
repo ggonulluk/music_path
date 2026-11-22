@@ -86,19 +86,41 @@
       </span>
     </div>
 
+    <div class="tb-speed">
+      <div class="tb-speed-row">
+        <b>Hız çalışması</b>
+        <button id="tb-a" class="ghost mini" title="Döngü başı: çalınan yer (kısayol: A)">A · baş</button>
+        <button id="tb-b" class="ghost mini" title="Döngü sonu: çalınan yer (kısayol: B)">B · son</button>
+        <button id="tb-loop-clear" class="ghost mini" disabled>Temizle</button>
+        <label class="tb-check" title="A ve B en yakın ölçü çizgisine oturur">
+          <input id="tb-snap" type="checkbox" checked> Ölçüye oturt</label>
+        <span id="tb-loop" class="tb-dim"></span>
+      </div>
+      <div class="tb-speed-row">
+        <label>Başlangıç <select id="tb-from"></select></label>
+        <label>Hedef <select id="tb-to"></select></label>
+        <label>Artış <select id="tb-step"></select></label>
+        <label>Her <select id="tb-every"></select> turda bir</label>
+        <button id="tb-train" class="btn sec" disabled>Çalışmayı başlat</button>
+        <span id="tb-train-info" class="tb-train-info" role="status"></span>
+      </div>
+    </div>
+
     <p class="tb-note tb-dim">
       Tab ve akorlar modelin <b>tahminidir</b>; teller ve perdeler elin en az
       hareket edeceği şekilde seçilir. <b>Sadeleştir</b> açıkken zayıf ve çok kısa notalar
       ayıklanır, aynı anda çalan nota sayısı en fazla 4'e iner. Ölçü çizgileri yanlış yerdeyse
       <b>baş</b> düğmeleriyle kaydır, tempo yanlışsa ×½ / ×2 seç —
       MusicXML dosyası da bu ayarlarla çıkar. Boşluk: oynat/durdur,
-      tab'a tıkla: o noktaya git.
+      tab'a tıkla: o noktaya git, <b>A</b> / <b>B</b>: döngünün başı ve sonu.
+      Döngünün dışına çıkmak için önce duraklat ya da döngüyü temizle.
     </p>
   </section>
 </main>
 
 <script src="fretboard.js"></script>
 <script src="musicxml.js"></script>
+<script src="speed.js"></script>
 <script src="tab.js"></script>
 </body>
 </html>
